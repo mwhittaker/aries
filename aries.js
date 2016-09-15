@@ -102,34 +102,34 @@ aries.Op.Type = {
   COMMIT:     "commit",
   CHECKPOINT: "checkpoint",
   FLUSH:      "flush",
-};
+}
 
 aries.Op.Operation = function(type, txn_id, args) {
   this.type = type;
   this.txn_id = txn_id;
   this.args = args;
-};
+}
 
 aries.Op.Write = function(txn_id, page_id, value) {
   return new aries.Op.Operation(aries.Op.Type.WRITE, txn_id, {
     page_id: page_id,
     value: value,
   });
-};
+}
 
 aries.Op.Commit = function(txn_id) {
   return new aries.Op.Operation(aries.Op.Type.COMMIT, txn_id, {});
-};
+}
 
 aries.Op.Checkpoint = function(txn_id) {
   return new aries.Op.Operation(aries.Op.Type.CHECKPOINT, txn_id, {});
-};
+}
 
 aries.Op.Flush = function(page_id) {
   return new aries.Op.Operation(aries.Op.Type.FLUSH, undefined, {
     page_id: page_id,
   });
-};
+}
 
 // Log.
 //
@@ -176,7 +176,7 @@ aries.LogType = {
   END:        "end",
   CLR:        "clr",
   CHECKPOINT: "checkpoint",
-};
+}
 
 aries.Update = function(lsn, txn_id, page_id, before, after, prev_lsn) {
   this.lsn = lsn;
@@ -186,21 +186,21 @@ aries.Update = function(lsn, txn_id, page_id, before, after, prev_lsn) {
   this.before = before;
   this.after = after;
   this.prev_lsn = prev_lsn;
-};
+}
 
 aries.Commit = function(lsn, txn_id, prev_lsn) {
   this.lsn = lsn;
   this.type = aries.LogType.COMMIT;
   this.txn_id = txn_id;
   this.prev_lsn = prev_lsn;
-};
+}
 
 aries.End = function(lsn, txn_id, prev_lsn) {
   this.lsn = lsn;
   this.type = aries.LogType.END;
   this.txn_id = txn_id;
   this.prev_lsn = prev_lsn;
-};
+}
 
 aries.Clr = function(lsn, txn_id, page_id, after, undo_next_lsn, prev_lsn) {
   this.lsn = lsn;
@@ -210,14 +210,14 @@ aries.Clr = function(lsn, txn_id, page_id, after, undo_next_lsn, prev_lsn) {
   this.after = after;
   this.undo_next_lsn = undo_next_lsn;
   this.prev_lsn = prev_lsn;
-};
+}
 
 aries.Checkpoint = function(lsn, dirty_page_table, txn_table) {
   this.lsn = lsn;
   this.type = aries.LogType.CHECKPOINT;
   this.dirty_page_table = dirty_page_table;
   this.txn_table = txn_table;
-};
+}
 
 // Transaction Table.
 //
@@ -240,12 +240,12 @@ aries.TxnStatus = {
   IN_PROGRESS: "in progress",
   COMMITTED:   "committed",
   ABORTED:     "aborted",
-};
+}
 
 aries.TxnTableEntry = function(txn_status, last_lsn) {
   this.txn_status = txn_status;
   this.last_lsn = last_lsn;
-};
+}
 
 // Dirty Page Table.
 //
@@ -260,7 +260,7 @@ aries.TxnTableEntry = function(txn_status, last_lsn) {
 //   type DirtyPageTable = page_id: string -> DirtyPageTableEntry
 aries.DirtyPageTableEntry = function(rec_lsn) {
   this.rec_lsn = rec_lsn;
-};
+}
 
 // Buffer Pool and Disk.
 //
@@ -279,7 +279,7 @@ aries.DirtyPageTableEntry = function(rec_lsn) {
 aries.Page = function(page_lsn, value) {
   this.page_lsn = page_lsn;
   this.value = value;
-};
+}
 
 // State.
 //
@@ -311,6 +311,12 @@ aries.State = function(log, num_flushed, txn_table, dirty_page_table,
 // http://stackoverflow.com/a/5344074/3187068.
 aries.deep_copy = function(x) {
   return JSON.parse(JSON.stringify(x));
+}
+
+// `aries.is_object_empty(x)` returns whether the Javascript object `x` is
+// empty. See https://goo.gl/KgXgio for implementation.
+aries.is_object_empty = function(x) {
+  return Object.keys(x).length === 0;
 }
 
 // `pages_accessed(ops: Operation list)` returns a list of the page ids of
@@ -368,11 +374,10 @@ aries.dirty = function(state, page_id, rec_lsn) {
 // `aries.begin_txn(state: State, txn_id: string)` ensures that a transaction
 // with transaction id `txn_id` is in the transaction table. If the transaction
 // is already in the transaction table, then this no-ops. Otherwise, it enters
-// it into the transaction table with status IN_PROGRESS and undefined lastLSN.
+// it into the transaction table with undefined status and undefined lastLSN.
 aries.begin_txn = function(state, txn_id) {
   if (!(txn_id in state.txn_table)) {
-    state.txn_table[txn_id] = new aries.TxnTableEntry(
-        aries.TxnStatus.IN_PROGRESS, undefined);
+    state.txn_table[txn_id] = new aries.TxnTableEntry(undefined, undefined);
   }
 }
 
@@ -383,6 +388,18 @@ aries.flush_log = function(state, lsn) {
   // flushed. For example, if we flush a single log entry, it has an LSN of 0,
   // but there are 1 entries flushed.
   state.num_flushed = Math.max(state.num_flushed, lsn + 1);
+}
+
+// `aries.latest_checkpoint_lsn(state: State)` returns the latest LSN of any
+// checkpoint in the log, or 0 if no checkpoints exist.
+aries.latest_checkpoint_lsn = function(state) {
+  var lsn = 0;
+  for (var i = 0; i < state.log.length; i++) {
+    if (state.log[i].type === aries.Op.Type.CHECKPOINT) {
+      lsn = i;
+    }
+  }
+  return lsn;
 }
 
 // `aries.rec_lsn(state: State, page_id: string)` returns the recLSN of the
@@ -412,7 +429,7 @@ aries.page_lsn = function(state, page_id) {
     undefined;
 }
 
-// Execution ///////////////////////////////////////////////////////////////////
+// Init ////////////////////////////////////////////////////////////////////////
 // Our ARIES simulator allows operations to write to pages with arbitrary page
 // ids. `aries.init(state: State, ops: Operation list)` ensures that all the
 // pages referenced in ops are in the disk.
@@ -423,6 +440,7 @@ aries.init = function(state, ops) {
   }
 }
 
+// Forward Processing //////////////////////////////////////////////////////////
 // `aries.process_write(state: State, write: Operation)` processes a write
 // operation.
 aries.process_write = function(state, write) {
@@ -441,7 +459,8 @@ aries.process_write = function(state, write) {
   // Introduce a new transaction into the transaction table, if necessary,
   // and update it.
   var prev_lsn = aries.last_lsn(state, write.txn_id);
-  aries.begin_txn(state, write.txn_id, lsn);
+  aries.begin_txn(state, write.txn_id);
+  state.txn_table[write.txn_id].txn_status = aries.TxnStatus.IN_PROGRESS;
   state.txn_table[write.txn_id].last_lsn = lsn;
 
   // write update record
@@ -518,26 +537,109 @@ aries.forward_process = function(state, ops) {
     }
     console.log(state);
   }
-};
+}
+
+// Crash ///////////////////////////////////////////////////////////////////////
+// `aries.crash(state: State)` simulates ARIES crashing by clearing all
+// non-ephemeral data.
+aries.crash = function(state) {
+  state.log = state.log.slice(0, state.num_flushed);
+  state.dirty_page_table = {};
+  state.txn_table = {};
+  state.buffer_pool = {};
+}
+
+// Analysis ////////////////////////////////////////////////////////////////////
+// `aries.analysis_update(state: State, update: LogEntry)` processes a update
+// operation during the analysis phase.
+aries.analysis_update = function(state, update) {
+  // Update the dirty page table.
+  aries.dirty(state, update.page_id, update.lsn);
+
+  // Update the transaction table.
+  aries.begin_txn(state, update.txn_id);
+  state.txn_table[update.txn_id].txn_status = aries.TxnStatus.ABORTED;
+  state.txn_table[update.txn_id].last_lsn = update.lsn;
+}
+
+// `aries.analysis_commit(state: State, commit: LogEntry)` processes a commit
+// operation during the analysis phase.
+aries.analysis_commit = function(state, commit) {
+  // Update the transaction table.
+  aries.begin_txn(state, commit.txn_id);
+  state.txn_table[commit.txn_id].txn_status = aries.TxnStatus.COMMIT;
+  state.txn_table[commit.txn_id].last_lsn = commit.lsn;
+}
+
+// `aries.analysis_end(state: State, end: LogEntry)` processes an end operation
+// during the analysis phase.
+aries.analysis_end = function(state, end) {
+  // Remove the transaction from the transaction table.
+  delete state.txn_table[end.txn_id];
+}
+
+// `aries.analysis_clr(state: State, clr: LogEntry)` processes a clr operation
+// during the analysis phase.
+aries.analysis_clr = function(state, log_entry) {
+  console.assert(false, "Our ARIES simulator doesn't support repeated " +
+                        "crashes, so the analysis should never see a CLR log " +
+                        "entry.");
+}
+
+// `aries.analysis_checkpoint(state: State, checkpoint: LogEntry)` processes a
+// checkpoint operation during the analysis phase.
+aries.analysis_checkpoint = function(state, checkpoint) {
+  console.assert(checkpoint.type === aries.LogType.CHECKPOINT);
+
+  var state_cleared = aries.is_object_empty(state.dirty_page_table) &&
+                      aries.is_object_empty(state.txn_table) &&
+                      aries.is_object_empty(state.buffer_pool);
+  console.assert(state_cleared, "Analysis should see at most checkpoint. If " +
+                                "that checkpoint is encountered, it better be " +
+                                "the first thing encountered!");
+
+  state.dirty_page_table = aries.deep_copy(checkpoint.dirty_page_table);
+  state.txn_table = aries.deep_copy(checkpoint.txn_table);
+}
 
 // `aries.analysis(state: State, ops: Operation list)` simulates the analysis
 // phase of ARIES.
 aries.analysis = function(state, ops) {
-  // TODO(mwhittaker): Implement.
-};
+  var start_lsn = aries.latest_checkpoint_lsn(state);
+  for (var i = start_lsn; i < state.log.length; i++) {
+    var log_entry = state.log[i];
+    if (log_entry.type === aries.LogType.UPDATE) {
+      aries.analysis_update(state, log_entry);
+    } else if (log_entry.type === aries.LogType.COMMIT) {
+      aries.analysis_commit(state, log_entry);
+    } else if (log_entry.type === aries.LogType.END) {
+      aries.analysis_end(state, log_entry);
+    } else if (log_entry.type === aries.LogType.CLR) {
+      aries.analysis_clr(state, log_entry);
+    } else if (log_entry.type === aries.LogType.CHECKPOINT) {
+      aries.analysis_checkpoint(state, log_entry);
+    } else {
+      console.log("Invalid operation type: " + op.type + " in operation " + op);
+    }
+    console.log(state);
+  }
+}
 
+// Redo ////////////////////////////////////////////////////////////////////////
 // `aries.redo(state: State, ops: Operation list)` simulates the redo phase of
 // ARIES.
 aries.redo = function(state, ops) {
   // TODO(mwhittaker): Implement.
-};
+}
 
+// Undo ////////////////////////////////////////////////////////////////////////
 // `aries.undo(state: State, ops: Operation list)` simulates the undo phase of
 // ARIES.
 aries.undo = function(state, ops) {
   // TODO(mwhittaker): Implement.
-};
+}
 
+// Main ////////////////////////////////////////////////////////////////////////
 // `aries.simulate(ops: Operation list)` Simulate the execution of ARIES on
 // `ops`.
 aries.simulate = function(ops) {
@@ -552,6 +654,7 @@ aries.simulate = function(ops) {
 
   aries.init(state, ops);
   aries.forward_process(state, ops);
+  aries.crash(state);
   aries.analysis(state, ops);
   aries.redo(state, ops);
   aries.undo(state, ops);
