@@ -52,8 +52,7 @@
 // TODO(larry): Add visualization.
 
 // The aries global namespace.
-// TODO(larry): Is this how namespacing in Javascript should work? -michael
-aries = {};
+var aries = {};
 
 // Types ///////////////////////////////////////////////////////////////////////
 // Operations.
@@ -74,61 +73,61 @@ aries = {};
 //   type Op.Type =
 //     | WRITE
 //     | COMMIT
-//     | CHECKPOINT
 //     | FLUSH
+//     | CHECKPOINT
 //
 //   type Op.Operation = {
-//     type:   aries.Op.Type,
-//     txn_id: string,
-//     args:   string list
+//     type:    aries.Op.Type,
+//     txn_id:  string,
+//     page_id: string,
+//     value:   string
 //   }
 //
-//   | command    | txn_id | args                             |
-//   | -------    | ------ | -------------------------------- |
-//   | write      | y      | {page_id: string, value: string} |
-//   | commit     | y      | {}                               |
-//   | checkpoint | y      | {}                               |
-//   | flush      | n      | {page_id: string}                |
+//   | type       | txn_id | page_id | value |
+//   | ---------- | ------ | ------- | ----- |
+//   | write      | y      | y       | y     |
+//   | commit     | y      | n       | n     |
+//   | flush      | n      | y       | n     |
+//   | checkpoint | n      | n       | n     |
 //
 // For example, the sequence of operations above would be represented as:
 //
-//   - {type: WRITE,  txn_id:"1", args:{page_id:"A", value:"foo"}}
-//   - {type: WRITE,  txn_id:"2", args:{page_id:"B", value:"bar"}}
-//   - {type: COMMIT, txn_id:"1", args:{}}
-//   - {type: FLUSH,              args:{page_id: string}}
+//   - {type: WRITE,  txn_id:"1", page_id:"A", value:"foo"}
+//   - {type: WRITE,  txn_id:"2", page_id:"B", value:"bar"}
+//   - {type: COMMIT, txn_id:"1"                          }
+//   - {type: FLUSH,              page_id:"B"             }
 aries.Op = {};
+
 aries.Op.Type = {
   WRITE:      "write",
   COMMIT:     "commit",
-  CHECKPOINT: "checkpoint",
   FLUSH:      "flush",
-}
+  CHECKPOINT: "checkpoint",
+};
 
-aries.Op.Operation = function(type, txn_id, args) {
+aries.Op.Operation = function(type) {
   this.type = type;
-  this.txn_id = txn_id;
-  this.args = args;
 }
 
 aries.Op.Write = function(txn_id, page_id, value) {
-  return new aries.Op.Operation(aries.Op.Type.WRITE, txn_id, {
-    page_id: page_id,
-    value: value,
-  });
+  aries.Op.Operation.call(this, aries.Op.Type.WRITE);
+  this.txn_id = txn_id;
+  this.page_id = page_id;
+  this.value = value;
 }
 
 aries.Op.Commit = function(txn_id) {
-  return new aries.Op.Operation(aries.Op.Type.COMMIT, txn_id, {});
-}
-
-aries.Op.Checkpoint = function(txn_id) {
-  return new aries.Op.Operation(aries.Op.Type.CHECKPOINT, txn_id, {});
+  aries.Op.Operation.call(this, aries.Op.Type.COMMIT);
+  this.txn_id = txn_id;
 }
 
 aries.Op.Flush = function(page_id) {
-  return new aries.Op.Operation(aries.Op.Type.FLUSH, undefined, {
-    page_id: page_id,
-  });
+  aries.Op.Operation.call(this, aries.Op.Type.FLUSH);
+  this.page_id = page_id;
+}
+
+aries.Op.Checkpoint = function() {
+  aries.Op.Operation.call(this, aries.Op.Type.CHECKPOINT);
 }
 
 // Log.
@@ -322,18 +321,19 @@ aries.is_object_empty = function(x) {
 // `pages_accessed(ops: Operation list)` returns a list of the page ids of
 // every page referenced in ops. The list may contain duplicates. For example,
 //
-//   var op1 = {type: WRITE,  txn_id:"1", args:{page_id:"A", value:"foo"}};
-//   var op2 = {type: WRITE,  txn_id:"2", args:{page_id:"B", value:"bar"}};
-//   var op3 = {type: COMMIT, txn_id:"1", args:{}};
-//   var op4 = {type: FLUSH,              args:{page_id: string}};
-//   var ops = [op1, op2, op3, op4];
+//   var ops = [
+//     {type: WRITE,  txn_id:"1", page_id:"A", value:"foo"},
+//     {type: WRITE,  txn_id:"2", page_id:"B", value:"bar"},
+//     {type: COMMIT, txn_id:"1"                          },
+//     {type: FLUSH,              page_id:"B"             }
+//   ];
 //   aries.pages_accessed(ops) // ["A", "B"]
 aries.pages_accessed = function(ops) {
   var page_ids = [];
   for (var i = 0; i < ops.length; i++) {
     if (ops[i].type === aries.Op.Type.WRITE ||
         ops[i].type === aries.Op.Type.FLUSH) {
-      page_ids.push(ops[i].args.page_id);
+      page_ids.push(ops[i].page_id);
     }
   }
   return page_ids;
@@ -463,13 +463,13 @@ aries.process_write = function(state, write) {
   var lsn = state.log.length;
 
   // Bring the page into the buffer pool, if necessary, and update it.
-  aries.pin(state, write.args.page_id);
-  var before = state.buffer_pool[write.args.page_id].value;
-  state.buffer_pool[write.args.page_id].page_lsn = lsn;
-  state.buffer_pool[write.args.page_id].value = write.args.value;
+  aries.pin(state, write.page_id);
+  var before = state.buffer_pool[write.page_id].value;
+  state.buffer_pool[write.page_id].page_lsn = lsn;
+  state.buffer_pool[write.page_id].value = write.value;
 
   // Update the dirty page table, if necessary.
-  aries.dirty(state, write.args.page_id, lsn);
+  aries.dirty(state, write.page_id, lsn);
 
   // Introduce a new transaction into the transaction table, if necessary,
   // and update it.
@@ -479,8 +479,8 @@ aries.process_write = function(state, write) {
   state.txn_table[write.txn_id].last_lsn = lsn;
 
   // write update record
-  state.log.push(new aries.Update(lsn, write.txn_id, write.args.page_id,
-        before, write.args.value, prev_lsn));
+  state.log.push(new aries.Update(lsn, write.txn_id, write.page_id,
+        before, write.value, prev_lsn));
 }
 
 // `aries.process_commit(state: State, commit: Operation)` processes a commit
@@ -518,20 +518,20 @@ aries.process_flush = function(state, flush) {
   console.assert(flush.type === aries.Op.Type.FLUSH);
 
   // Flush the log.
-  var page_lsn = aries.page_lsn(state, flush.args.page_id);
+  var page_lsn = aries.page_lsn(state, flush.page_id);
   if (typeof page_lsn === "undefined") {
     // If the page isn't in the buffer pool, then it must have already been
     // flushed to disk, so we don't have to do anything.
-    console.assert(!(flush.args.page_id in state.dirty_page_table));
+    console.assert(!(flush.page_id in state.dirty_page_table));
     return;
   }
   aries.flush_log(state, page_lsn);
 
   // Flush the page to disk.
-  aries.flush(state, flush.args.page_id);
+  aries.flush(state, flush.page_id);
 
   // Clear the dirty page table.
-  delete state.dirty_page_table[flush.args.page_id];
+  delete state.dirty_page_table[flush.page_id];
 }
 
 // `aries.forward_process(state: State, ops: Operation list)` processes a
