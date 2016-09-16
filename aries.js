@@ -720,7 +720,42 @@ aries.redo = function(state) {
 // `aries.undo(state: State, ops: Operation list)` simulates the undo phase of
 // ARIES.
 aries.undo = function(state) {
-  // TODO(mwhittaker): Implement.
+  var losers = [];
+  for (var page_id in state.txn_table) {
+    losers.push(state.txn_table[page_id].last_lsn);
+  }
+
+  while (losers.length > 0) {
+    console.log(losers);
+    console.log(state);
+    // Get the loser log entry. We repeatedly sort the loser transaction LSNs
+    // and pop the last (i.e. biggest) LSN.
+    losers.sort();
+    var loser = losers.pop();
+    var loser_entry = state.log[loser];
+    console.assert(loser_entry.type === aries.LogType.UPDATE,
+        "Our ARIES simulator doesn't support repeated crashes, so the undo " +
+        "phase should never see a CLR log entry.");
+
+    // Append a CLR entry.
+    var clr_lsn = state.log.length;
+    var undo_next_lsn = loser_entry.prev_lsn;
+    var after = loser_entry.before;
+    var prev_lsn = aries.last_lsn(state, loser_entry.txn_id);
+    state.log.push(new aries.Clr(clr_lsn, loser_entry.txn_ind,
+          loser_entry.page_id, undo_next_lsn, after, prev_lsn));
+
+    if (typeof undo_next_lsn !== "undefined") {
+      // Update the loser transactions.
+      losers.push(undo_next_lsn);
+    } else {
+      // End a completely undone transaction and remove it from the transaction
+      // table.
+      state.log.push(new aries.End(state.log.length, loser_entry.txn_id,
+                                   clr_lsn));
+      delete state.txn_table[loser_entry.txn_id];
+    }
+  }
 }
 
 // Main ////////////////////////////////////////////////////////////////////////
