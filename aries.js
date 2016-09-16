@@ -548,8 +548,8 @@ aries.forward_process = function(state, ops) {
     } else if (op.type === aries.Op.Type.FLUSH) {
       aries.process_flush(state, op);
     } else {
-      console.assert(false, "Invalid operation type: " + op.type + " in
-          operation " + op);
+      console.assert(false, "Invalid operation type: " + op.type +
+                     " in operation " + op);
     }
   }
 }
