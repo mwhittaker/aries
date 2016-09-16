@@ -140,9 +140,9 @@ aries.Op.Checkpoint = function() {
 // number (LSN) and a type, but each log entry has a different set of data
 // associated with it. The log is represented by the following types:
 //
-//   type LogEntry = {
+//   type Log.Entry = {
 //     lsn:              number,
-//     type:             aries.LogTypes,
+//     type:             aries.Log.Type,
 //     txn_id:           string,
 //     page_id:          string,
 //     before:           string,
@@ -152,8 +152,6 @@ aries.Op.Checkpoint = function() {
 //     txn_table:        TxnTable,
 //     prev_lsn:         number, // or undefined
 //   }
-//
-//   type Log = LogEntry list
 //
 //   | command          | update | commit | end | clr | checkpoint |
 //   | ---------------- | ------ | ------ | --- | --- | ---------- |
@@ -169,7 +167,9 @@ aries.Op.Checkpoint = function() {
 //   | prev_lsn         | y      | y      | y   | y   |            |
 //
 // For convenience, a log entry's LSN is the same as its index in the log.
-aries.LogType = {
+aries.Log = {};
+
+aries.Log.Type = {
   UPDATE:     "update",
   COMMIT:     "commit",
   END:        "end",
@@ -177,9 +177,13 @@ aries.LogType = {
   CHECKPOINT: "checkpoint",
 }
 
-aries.Update = function(lsn, txn_id, page_id, before, after, prev_lsn) {
+aries.Log.Entry = function(type, lsn) {
+  this.type = type;
   this.lsn = lsn;
-  this.type = aries.LogType.UPDATE;
+}
+
+aries.Log.Update = function(lsn, txn_id, page_id, before, after, prev_lsn) {
+  aries.Log.Entry.call(this, aries.Log.Type.UPDATE, lsn);
   this.txn_id = txn_id;
   this.page_id = page_id;
   this.before = before;
@@ -187,23 +191,20 @@ aries.Update = function(lsn, txn_id, page_id, before, after, prev_lsn) {
   this.prev_lsn = prev_lsn;
 }
 
-aries.Commit = function(lsn, txn_id, prev_lsn) {
-  this.lsn = lsn;
-  this.type = aries.LogType.COMMIT;
+aries.Log.Commit = function(lsn, txn_id, prev_lsn) {
+  aries.Log.Entry.call(this, aries.Log.Type.COMMIT, lsn);
   this.txn_id = txn_id;
   this.prev_lsn = prev_lsn;
 }
 
-aries.End = function(lsn, txn_id, prev_lsn) {
-  this.lsn = lsn;
-  this.type = aries.LogType.END;
+aries.Log.End = function(lsn, txn_id, prev_lsn) {
+  aries.Log.Entry.call(this, aries.Log.Type.END, lsn);
   this.txn_id = txn_id;
   this.prev_lsn = prev_lsn;
 }
 
-aries.Clr = function(lsn, txn_id, page_id, after, undo_next_lsn, prev_lsn) {
-  this.lsn = lsn;
-  this.type = aries.LogType.CLR;
+aries.Log.CLR = function(lsn, txn_id, page_id, after, undo_next_lsn, prev_lsn) {
+  aries.Log.Entry.call(this, aries.Log.Type.CLR, lsn);
   this.txn_id = txn_id;
   this.page_id = page_id;
   this.after = after;
@@ -211,9 +212,8 @@ aries.Clr = function(lsn, txn_id, page_id, after, undo_next_lsn, prev_lsn) {
   this.prev_lsn = prev_lsn;
 }
 
-aries.Checkpoint = function(lsn, dirty_page_table, txn_table) {
-  this.lsn = lsn;
-  this.type = aries.LogType.CHECKPOINT;
+aries.Log.Checkpoint = function(lsn, dirty_page_table, txn_table) {
+  aries.Log.Entry.call(this, aries.Log.Type.CHECKPOINT, lsn);
   this.dirty_page_table = dirty_page_table;
   this.txn_table = txn_table;
 }
@@ -288,7 +288,7 @@ aries.Page = function(page_lsn, value) {
 // - `num_flushed`: the number of log entries that have been flushed to disked.
 //
 //   type state = {
-//     log: Log,
+//     log: aries.Log.Entry list,
 //     num_flushed: number,
 //     txn_table: TxnTable,
 //     dirty_page_table: DirtyPageTable,
@@ -479,7 +479,7 @@ aries.process_write = function(state, write) {
   state.txn_table[write.txn_id].last_lsn = lsn;
 
   // write update record
-  state.log.push(new aries.Update(lsn, write.txn_id, write.page_id,
+  state.log.push(new aries.Log.Update(lsn, write.txn_id, write.page_id,
         before, write.value, prev_lsn));
 }
 
@@ -492,8 +492,8 @@ aries.process_commit = function(state, commit) {
   var commit_lsn = state.log.length;
   var end_lsn = commit_lsn + 1;
   var prev_lsn = aries.last_lsn(state, commit.txn_id)
-  state.log.push(new aries.Commit(commit_lsn, commit.txn_id, prev_lsn));
-  state.log.push(new aries.End(end_lsn, commit.txn_id, commit_lsn));
+  state.log.push(new aries.Log.Commit(commit_lsn, commit.txn_id, prev_lsn));
+  state.log.push(new aries.Log.End(end_lsn, commit.txn_id, commit_lsn));
 
   // Flush the log.
   aries.flush_log(state, end_lsn);
@@ -507,7 +507,7 @@ aries.process_commit = function(state, commit) {
 aries.process_checkpoint = function(state, checkpoint) {
   console.assert(checkpoint.type === aries.Op.Type.CHECKPOINT);
   var lsn = state.log.length;
-  state.log.push(new aries.Checkpoint(lsn,
+  state.log.push(new aries.Log.Checkpoint(lsn,
         aries.deep_copy(state.dirty_page_table),
         aries.deep_copy(state.txn_table)));
 }
@@ -604,7 +604,7 @@ aries.analysis_clr = function(state, log_entry) {
 // `aries.analysis_checkpoint(state: State, checkpoint: LogEntry)` processes a
 // checkpoint operation during the analysis phase.
 aries.analysis_checkpoint = function(state, checkpoint) {
-  console.assert(checkpoint.type === aries.LogType.CHECKPOINT);
+  console.assert(checkpoint.type === aries.Log.Type.CHECKPOINT);
 
   var state_cleared = aries.is_object_empty(state.dirty_page_table) &&
                       aries.is_object_empty(state.txn_table) &&
@@ -623,15 +623,15 @@ aries.analysis = function(state) {
   var start_lsn = aries.latest_checkpoint_lsn(state);
   for (var i = start_lsn; i < state.log.length; i++) {
     var log_entry = state.log[i];
-    if (log_entry.type === aries.LogType.UPDATE) {
+    if (log_entry.type === aries.Log.Type.UPDATE) {
       aries.analysis_update(state, log_entry);
-    } else if (log_entry.type === aries.LogType.COMMIT) {
+    } else if (log_entry.type === aries.Log.Type.COMMIT) {
       aries.analysis_commit(state, log_entry);
-    } else if (log_entry.type === aries.LogType.END) {
+    } else if (log_entry.type === aries.Log.Type.END) {
       aries.analysis_end(state, log_entry);
-    } else if (log_entry.type === aries.LogType.CLR) {
+    } else if (log_entry.type === aries.Log.Type.CLR) {
       aries.analysis_clr(state, log_entry);
-    } else if (log_entry.type === aries.LogType.CHECKPOINT) {
+    } else if (log_entry.type === aries.Log.Type.CHECKPOINT) {
       aries.analysis_checkpoint(state, log_entry);
     } else {
       console.assert(false, "Invalid log type: " + log_entry.type +
@@ -697,15 +697,15 @@ aries.redo = function(state) {
 
   for (var i = start_lsn; i < state.log.length; i++) {
     var log_entry = state.log[i];
-    if (log_entry.type === aries.LogType.UPDATE) {
+    if (log_entry.type === aries.Log.Type.UPDATE) {
       aries.redo_update(state, log_entry);
-    } else if (log_entry.type === aries.LogType.COMMIT) {
+    } else if (log_entry.type === aries.Log.Type.COMMIT) {
       aries.redo_commit(state, log_entry);
-    } else if (log_entry.type === aries.LogType.END) {
+    } else if (log_entry.type === aries.Log.Type.END) {
       aries.redo_end(state, log_entry);
-    } else if (log_entry.type === aries.LogType.CLR) {
+    } else if (log_entry.type === aries.Log.Type.CLR) {
       aries.redo_clr(state, log_entry);
-    } else if (log_entry.type === aries.LogType.CHECKPOINT) {
+    } else if (log_entry.type === aries.Log.Type.CHECKPOINT) {
       aries.redo_checkpoint(state, log_entry);
     } else {
       console.assert(false, "Invalid log type: " + log_entry.type +
@@ -729,7 +729,7 @@ aries.undo = function(state) {
     losers.sort();
     var loser = losers.pop();
     var loser_entry = state.log[loser];
-    console.assert(loser_entry.type === aries.LogType.UPDATE,
+    console.assert(loser_entry.type === aries.Log.Type.UPDATE,
         "Our ARIES simulator doesn't support repeated crashes, so the undo " +
         "phase should never see a CLR log entry.");
 
@@ -738,7 +738,7 @@ aries.undo = function(state) {
     var undo_next_lsn = loser_entry.prev_lsn;
     var after = loser_entry.before;
     var prev_lsn = aries.last_lsn(state, loser_entry.txn_id);
-    state.log.push(new aries.Clr(clr_lsn, loser_entry.txn_ind,
+    state.log.push(new aries.Log.CLR(clr_lsn, loser_entry.txn_ind,
           loser_entry.page_id, undo_next_lsn, after, prev_lsn));
 
     if (typeof undo_next_lsn !== "undefined") {
@@ -747,7 +747,7 @@ aries.undo = function(state) {
     } else {
       // End a completely undone transaction and remove it from the transaction
       // table.
-      state.log.push(new aries.End(state.log.length, loser_entry.txn_id,
+      state.log.push(new aries.Log.End(state.log.length, loser_entry.txn_id,
                                    clr_lsn));
       delete state.txn_table[loser_entry.txn_id];
     }
