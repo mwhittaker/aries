@@ -3,6 +3,26 @@
   <head>
     <title>ARIES</title>
     <script src="aries.js"></script>
+    <script>
+      // TODO(mwhittaker): Parse operations from the user.
+      var ops = [
+        new aries.Op.Write("1", "A", "foo"),
+        new aries.Op.Write("2", "B", "foo"),
+        new aries.Op.Flush("B"),
+        new aries.Op.Write("3", "C", "foo"),
+        new aries.Op.Flush("C"),
+        new aries.Op.Checkpoint(),
+        new aries.Op.Write("2", "D", "foo"),
+        new aries.Op.Write("1", "A", "foo"),
+        new aries.Op.Commit("1"),
+        new aries.Op.Write("3", "C", "foo"),
+        new aries.Op.Write("2", "D", "foo"),
+        new aries.Op.Flush("D"),
+        new aries.Op.Write("2", "B", "foo"),
+        new aries.Op.Write("3", "A", "foo"),
+      ];
+      aries.simulate(ops);
+    </script>
   </head>
   <body>
   </body>

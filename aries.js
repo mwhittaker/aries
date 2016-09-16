@@ -285,7 +285,7 @@ aries.Page = function(page_lsn, value) {
 // The state of ARIES is the aggregate of the log, transaction table, dirty
 // page table, buffer pool, and disk. The state also includes
 //
-// - `num_flushed`: the number of log entries that have been flushed to disked.
+// - `num_flushed`: the number of log entries that have been flushed to disk.
 //
 //   type state = {
 //     log: aries.Log.Entry list,
@@ -446,8 +446,8 @@ aries.page_lsn = function(state, page_id) {
 
 // Init ////////////////////////////////////////////////////////////////////////
 // Our ARIES simulator allows operations to write to pages with arbitrary page
-// ids. `aries.init(state: State, ops: Operation list)` ensures that all the
-// pages referenced in ops are in the disk.
+// ids. `aries.init(state: aries.State, ops: aries.Op.Operation list)` ensures
+// that all the pages referenced in ops are in the disk.
 aries.init = function(state, ops) {
   var page_ids = aries.pages_accessed(ops);
   for (var i = 0; i < page_ids.length; i++) {
@@ -755,8 +755,8 @@ aries.undo = function(state) {
 }
 
 // Main ////////////////////////////////////////////////////////////////////////
-// `aries.simulate(ops: Operation list)` Simulate the execution of ARIES on
-// `ops`.
+// `aries.simulate(ops: aries.Op.Operation list)` Simulate the execution of
+// ARIES on `ops`.
 aries.simulate = function(ops) {
   var log = [];
   var num_flushed = 0;
@@ -774,26 +774,3 @@ aries.simulate = function(ops) {
   aries.redo(state);
   aries.undo(state);
 }
-
-function main() {
-  // TODO(mwhittaker): Parse operations from the user.
-  var ops = [
-    new aries.Op.Write("1", "A", "foo"),
-    new aries.Op.Write("2", "B", "foo"),
-    new aries.Op.Flush("B"),
-    new aries.Op.Write("3", "C", "foo"),
-    new aries.Op.Flush("C"),
-    new aries.Op.Checkpoint(),
-    new aries.Op.Write("2", "D", "foo"),
-    new aries.Op.Write("1", "A", "foo"),
-    new aries.Op.Commit("1"),
-    new aries.Op.Write("3", "C", "foo"),
-    new aries.Op.Write("2", "D", "foo"),
-    new aries.Op.Flush("D"),
-    new aries.Op.Write("2", "B", "foo"),
-    new aries.Op.Write("3", "A", "foo"),
-  ];
-  aries.simulate(ops);
-}
-
-main();
