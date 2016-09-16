@@ -339,6 +339,33 @@ aries.pages_accessed = function(ops) {
   return page_ids;
 }
 
+// `aries.latest_checkpoint_lsn(state: State)` returns the latest LSN of any
+// checkpoint in the log, or 0 if no checkpoints exist.
+aries.latest_checkpoint_lsn = function(state) {
+  var lsn = 0;
+  for (var i = 0; i < state.log.length; i++) {
+    if (state.log[i].type === aries.Op.Type.CHECKPOINT) {
+      lsn = i;
+    }
+  }
+  return lsn;
+}
+
+// `aries.min_rec_lsn(state: State)` returns the minimum recLSN in the dirty
+// page table or undefined if the dirty page table is empty.
+aries.min_rec_lsn = function(state) {
+  var min = undefined;
+  for (var page_id in state.dirty_page_table) {
+    var rec_lsn = state.dirty_page_table[page_id].rec_lsn;
+    if (typeof min === "undefined") {
+      min = rec_lsn
+    } else {
+      min = Math.min(min, rec_lsn);
+    }
+  }
+  return min;
+}
+
 // `pin(state: State, page_id: string)` ensures that the page with page id
 // `page_id` is pinned in the buffer pool. That is, if the page is already in
 // the buffer pool, then this function no-ops. If it isn't, then it is fetched
@@ -388,18 +415,6 @@ aries.flush_log = function(state, lsn) {
   // flushed. For example, if we flush a single log entry, it has an LSN of 0,
   // but there are 1 entries flushed.
   state.num_flushed = Math.max(state.num_flushed, lsn + 1);
-}
-
-// `aries.latest_checkpoint_lsn(state: State)` returns the latest LSN of any
-// checkpoint in the log, or 0 if no checkpoints exist.
-aries.latest_checkpoint_lsn = function(state) {
-  var lsn = 0;
-  for (var i = 0; i < state.log.length; i++) {
-    if (state.log[i].type === aries.Op.Type.CHECKPOINT) {
-      lsn = i;
-    }
-  }
-  return lsn;
 }
 
 // `aries.rec_lsn(state: State, page_id: string)` returns the recLSN of the
@@ -604,7 +619,7 @@ aries.analysis_checkpoint = function(state, checkpoint) {
 
 // `aries.analysis(state: State, ops: Operation list)` simulates the analysis
 // phase of ARIES.
-aries.analysis = function(state, ops) {
+aries.analysis = function(state) {
   var start_lsn = aries.latest_checkpoint_lsn(state);
   for (var i = start_lsn; i < state.log.length; i++) {
     var log_entry = state.log[i];
@@ -619,23 +634,92 @@ aries.analysis = function(state, ops) {
     } else if (log_entry.type === aries.LogType.CHECKPOINT) {
       aries.analysis_checkpoint(state, log_entry);
     } else {
-      console.log("Invalid operation type: " + op.type + " in operation " + op);
+      console.log("Invalid log type: " + log_entry.type + " in operation " +
+          log_entry);
     }
     console.log(state);
   }
 }
 
 // Redo ////////////////////////////////////////////////////////////////////////
+// `aries.redo_update(state: State, update: LogEntry)` processes a update
+// operation during the redo phase.
+aries.redo_update = function(state, update) {
+  // An update to a page need not be redone if
+  //   1. the page is not in the dirty page table;
+  //   2. the page is in the dirty page table, and the recLSN is greater than
+  //      the LSN of the update; or
+  //   3. the recLSN on disk is greater than or equal to the LSN of the update.
+  if (!(update.page_id in state.dirty_page_table) ||
+      state.dirty_page_table[update.page_id].rec_lsn > update.lsn ||
+      state.disk[update.page_id].page_lsn >= update.lsn) {
+    return;
+  }
+
+  aries.pin(state, update.page_id);
+  state.buffer_pool[update.page_id].page_lsn = update.lsn;
+  state.buffer_pool[update.page_id].value = update.after;
+}
+
+// `aries.redo_commit(state: State, commit: LogEntry)` processes a commit
+// operation during the redo phase.
+aries.redo_commit = function(state, commit) {
+  // Commits are not redone.
+}
+
+// `aries.redo_end(state: State, end: LogEntry)` processes an end operation
+// during the redo phase.
+aries.redo_end = function(state, end) {
+  // Ends are not redone.
+}
+
+// `aries.redo_clr(state: State, clr: LogEntry)` processes a clr operation
+// during the redo phase.
+aries.redo_clr = function(state, clr) {
+  console.assert(false, "Our ARIES simulator doesn't support repeated " +
+                        "crashes, so the redo should never see a CLR log " +
+                        "entry.");
+}
+
+// `aries.redo_checkpoint(state: State, checkpoint: LogEntry)` processes a
+// checkpoint operation during the redo phase.
+aries.redo_checkpoint = function(state, checkpoint) {
+  // Checkpoints are not redone.
+}
+
 // `aries.redo(state: State, ops: Operation list)` simulates the redo phase of
 // ARIES.
-aries.redo = function(state, ops) {
-  // TODO(mwhittaker): Implement.
+aries.redo = function(state) {
+  var start_lsn = aries.min_rec_lsn(state);
+  if (typeof start_lsn === "undefined") {
+    // If there are no dirty pages, then we have nothing to redo!
+    return;
+  }
+
+  for (var i = start_lsn; i < state.log.length; i++) {
+    var log_entry = state.log[i];
+    if (log_entry.type === aries.LogType.UPDATE) {
+      aries.redo_update(state, log_entry);
+    } else if (log_entry.type === aries.LogType.COMMIT) {
+      aries.redo_commit(state, log_entry);
+    } else if (log_entry.type === aries.LogType.END) {
+      aries.redo_end(state, log_entry);
+    } else if (log_entry.type === aries.LogType.CLR) {
+      aries.redo_clr(state, log_entry);
+    } else if (log_entry.type === aries.LogType.CHECKPOINT) {
+      aries.redo_checkpoint(state, log_entry);
+    } else {
+      console.log("Invalid log type: " + log_entry.type + " in operation " +
+          log_entry);
+    }
+    console.log(state);
+  }
 }
 
 // Undo ////////////////////////////////////////////////////////////////////////
 // `aries.undo(state: State, ops: Operation list)` simulates the undo phase of
 // ARIES.
-aries.undo = function(state, ops) {
+aries.undo = function(state) {
   // TODO(mwhittaker): Implement.
 }
 
@@ -655,9 +739,9 @@ aries.simulate = function(ops) {
   aries.init(state, ops);
   aries.forward_process(state, ops);
   aries.crash(state);
-  aries.analysis(state, ops);
-  aries.redo(state, ops);
-  aries.undo(state, ops);
+  aries.analysis(state);
+  aries.redo(state);
+  aries.undo(state);
 }
 
 function main() {
