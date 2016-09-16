@@ -548,9 +548,9 @@ aries.forward_process = function(state, ops) {
     } else if (op.type === aries.Op.Type.FLUSH) {
       aries.process_flush(state, op);
     } else {
-      console.log("Invalid operation type: " + op.type + " in operation " + op);
+      console.assert(false, "Invalid operation type: " + op.type + " in
+          operation " + op);
     }
-    console.log(state);
   }
 }
 
@@ -634,10 +634,9 @@ aries.analysis = function(state) {
     } else if (log_entry.type === aries.LogType.CHECKPOINT) {
       aries.analysis_checkpoint(state, log_entry);
     } else {
-      console.log("Invalid log type: " + log_entry.type + " in operation " +
-          log_entry);
+      console.assert(false, "Invalid log type: " + log_entry.type +
+                     " in operation " + log_entry);
     }
-    console.log(state);
   }
 }
 
@@ -709,10 +708,9 @@ aries.redo = function(state) {
     } else if (log_entry.type === aries.LogType.CHECKPOINT) {
       aries.redo_checkpoint(state, log_entry);
     } else {
-      console.log("Invalid log type: " + log_entry.type + " in operation " +
-          log_entry);
+      console.assert(false, "Invalid log type: " + log_entry.type +
+                     " in operation " + log_entry);
     }
-    console.log(state);
   }
 }
 
@@ -726,8 +724,6 @@ aries.undo = function(state) {
   }
 
   while (losers.length > 0) {
-    console.log(losers);
-    console.log(state);
     // Get the loser log entry. We repeatedly sort the loser transaction LSNs
     // and pop the last (i.e. biggest) LSN.
     losers.sort();
