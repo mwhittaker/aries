@@ -578,7 +578,6 @@ aries.analysis_update = function(state, update) {
 
   // Update the transaction table.
   aries.begin_txn(state, update.txn_id);
-  state.txn_table[update.txn_id].txn_status = aries.TxnStatus.ABORTED;
   state.txn_table[update.txn_id].last_lsn = update.lsn;
 }
 
@@ -648,6 +647,15 @@ aries.analysis = function(states) {
     states.push(state);
     state = aries.deep_copy(state);
   }
+
+  // After the analysis phase, any in progress transactions should be treated
+  // as aborted.
+  for (var txn_id in state.txn_table) {
+    if (state.txn_table[txn_id].txn_status === aries.TxnStatus.IN_PROGRESS) {
+      state.txn_table[txn_id].txn_status = aries.TxnStatus.ABORTED;
+    }
+  }
+  states.push(state);
 }
 
 // Redo ////////////////////////////////////////////////////////////////////////
