@@ -536,7 +536,7 @@ aries.process_flush = function(state, flush) {
 
 // `aries.forward_process(state: State, ops: Operation list)` processes a
 // sequence of operations during normal database operation.
-aries.forward_process = function(state, ops) {
+aries.forward_process = function(state, ops, onStateChanged) {
   for (var i = 0; i < ops.length; i++) {
     var op = ops[i];
     if (op.type === aries.Op.Type.WRITE) {
@@ -551,17 +551,19 @@ aries.forward_process = function(state, ops) {
       console.assert(false, "Invalid operation type: " + op.type +
                      " in operation " + op);
     }
+    onStateChanged(state);
   }
 }
 
 // Crash ///////////////////////////////////////////////////////////////////////
 // `aries.crash(state: State)` simulates ARIES crashing by clearing all
 // non-ephemeral data.
-aries.crash = function(state) {
+aries.crash = function(state, onStateChanged) {
   state.log = state.log.slice(0, state.num_flushed);
   state.dirty_page_table = {};
   state.txn_table = {};
   state.buffer_pool = {};
+  onStateChanged(state);
 }
 
 // Analysis ////////////////////////////////////////////////////////////////////
@@ -582,7 +584,7 @@ aries.analysis_update = function(state, update) {
 aries.analysis_commit = function(state, commit) {
   // Update the transaction table.
   aries.begin_txn(state, commit.txn_id);
-  state.txn_table[commit.txn_id].txn_status = aries.TxnStatus.COMMIT;
+  state.txn_table[commit.txn_id].txn_status = aries.TxnStatus.COMMITTED;
   state.txn_table[commit.txn_id].last_lsn = commit.lsn;
 }
 
@@ -619,7 +621,7 @@ aries.analysis_checkpoint = function(state, checkpoint) {
 
 // `aries.analysis(state: State, ops: Operation list)` simulates the analysis
 // phase of ARIES.
-aries.analysis = function(state) {
+aries.analysis = function(state, onStateChanged) {
   var start_lsn = aries.latest_checkpoint_lsn(state);
   for (var i = start_lsn; i < state.log.length; i++) {
     var log_entry = state.log[i];
@@ -637,6 +639,7 @@ aries.analysis = function(state) {
       console.assert(false, "Invalid log type: " + log_entry.type +
                      " in operation " + log_entry);
     }
+    onStateChanged(state);
   }
 }
 
@@ -688,7 +691,7 @@ aries.redo_checkpoint = function(state, checkpoint) {
 
 // `aries.redo(state: State, ops: Operation list)` simulates the redo phase of
 // ARIES.
-aries.redo = function(state) {
+aries.redo = function(state, onStateChanged) {
   var start_lsn = aries.min_rec_lsn(state);
   if (typeof start_lsn === "undefined") {
     // If there are no dirty pages, then we have nothing to redo!
@@ -711,13 +714,14 @@ aries.redo = function(state) {
       console.assert(false, "Invalid log type: " + log_entry.type +
                      " in operation " + log_entry);
     }
+    onStateChanged(state);
   }
 }
 
 // Undo ////////////////////////////////////////////////////////////////////////
 // `aries.undo(state: State, ops: Operation list)` simulates the undo phase of
 // ARIES.
-aries.undo = function(state) {
+aries.undo = function(state, onStateChanged) {
   var losers = [];
   for (var page_id in state.txn_table) {
     losers.push(state.txn_table[page_id].last_lsn);
@@ -751,13 +755,14 @@ aries.undo = function(state) {
                                    clr_lsn));
       delete state.txn_table[loser_entry.txn_id];
     }
+    onStateChanged(state);
   }
 }
 
 // Main ////////////////////////////////////////////////////////////////////////
 // `aries.simulate(ops: aries.Op.Operation list)` Simulate the execution of
 // ARIES on `ops`.
-aries.simulate = function(ops) {
+aries.simulate = function(ops, onStateChanged) {
   var log = [];
   var num_flushed = 0;
   var txn_table = {};
@@ -768,9 +773,9 @@ aries.simulate = function(ops) {
                               buffer_pool, disk);
 
   aries.init(state, ops);
-  aries.forward_process(state, ops);
-  aries.crash(state);
-  aries.analysis(state);
-  aries.redo(state);
-  aries.undo(state);
+  aries.forward_process(state, ops, onStateChanged);
+  aries.crash(state, onStateChanged);
+  aries.analysis(state, onStateChanged);
+  aries.redo(state, onStateChanged);
+  aries.undo(state, onStateChanged);
 }

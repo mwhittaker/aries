@@ -2,8 +2,203 @@
 <html>
   <head>
     <title>ARIES</title>
+    <script src="https://d3js.org/d3.v4.min.js"></script>
     <script src="aries.js"></script>
+    <style>
+      .width-30 {
+        width: 30%;
+        margin: 0 1.25% 0 1.25%;
+        float: left;
+      }
+
+      table {
+        border-spacing: 0;
+        border-collapse: collapse;
+      }
+
+      th, td {
+        border: 1px solid black;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="width-30">
+      <div>
+        <h2>Log</h2>
+        <table id="log">
+          <thead>
+            <tr>
+              <th>LSN</th>
+              <th>Transaction ID</th>
+              <th>Type</th>
+              <th>Page ID</th>
+              <th>prevLSN</th>
+            </tr>
+          </thead>
+          <tbody>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="width-30">
+      <div>
+        <h2>Dirty Page Table</h2>
+        <table id="dirty-page-table">
+          <thead>
+            <tr>
+              <th>Page ID</th>
+              <th>recLSN</th>
+            </tr>
+          </thead>
+          <tbody>
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <h2>Transaction Table</h2>
+        <table id="transaction-table">
+          <thead>
+            <tr>
+              <th>Transaction ID</th>
+              <th>Status</th>
+              <th>lastLSN</th>
+            </tr>
+          </thead>
+          <tbody>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="width-30">
+      <div>
+        <h2>Buffer Pool</h2>
+        <table id="buffer-pool">
+          <thead>
+            <tr>
+              <th>Page ID</th>
+              <th>pageLSN</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <h2>Disk</h2>
+        <table id="disk">
+          <thead>
+            <tr>
+              <th>Page ID</th>
+              <th>pageLSN</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <script>
+
+      // Mapping of DOM table id to data keys corresponding to table columns
+      var column_keys = {
+        'log': ['lsn', 'txn_id', 'type', 'page_id', 'prev_lsn'],
+        'dirty-page-table': ['page_id', 'rec_lsn'],
+        'transaction-table': ['txn_id', 'txn_status', 'last_lsn'],
+        'buffer-pool': ['page_id', 'page_lsn', 'value'],
+        'disk': ['page_id', 'page_lsn', 'value']
+      };
+
+      // Helper function to convert an object map to a list
+      function mapToList(map, id_name) {
+        var list = [];
+        for (var key of Object.keys(map)) {
+          var obj = {};
+          obj[id_name] = key;
+          for (var field of Object.keys(map[key])) {
+            obj[field] = map[key][field];
+          }
+          list.push(obj);
+        }
+        return list;
+      }
+
+      // Given a DOM table id and data list/object, join the new data to the
+      // DOM table using D3 joins
+      function updateTable(table_id, data) {
+        var columns = column_keys[table_id];
+        var key = columns[0];
+        if (!Array.isArray(data)) {
+          data = mapToList(data, key);
+        }
+
+        var updated_rows = d3.select('table#' + table_id)
+                             .select('tbody')
+                             .selectAll('tr')
+                             .data(data, function(d) {
+                               return d ? d[key] : this.id;
+                             })
+                             .style('color', 'black');
+
+        updated_rows.exit().remove();
+
+        var cells = updated_rows.selectAll('td')
+                                .data(function(row) {
+                                  return columns.map(function(column) {
+                                    return row[column];
+                                  });
+                                })
+                                .style('font-weight', function(d) {
+                                  if (d !== this.__oldData__) {
+                                    return 'bold';
+                                  }
+                                  return 'normal';
+                                })
+                                .property('__oldData__', function(d) {
+                                  if (d !== this.__oldData__) {
+                                    d3.select(this.parentNode)
+                                      .style('color', 'blue');
+                                  }
+                                  return d;
+                                })
+                                .text(function(d) { return d; });
+
+        var new_rows = updated_rows.enter()
+                                   .append('tr')
+                                   .attr('id', function(d) {
+                                     return d[key]
+                                   })
+                                   .style('color', 'green');
+
+        new_rows.selectAll('td')
+                .data(function(row) {
+                  return columns.map(function(column) {
+                    return row[column];
+                  });
+                })
+                .enter()
+                .append('td')
+                .property('__oldData__', function(d) {
+                  return d;
+                })
+                .text(function(d) { return d; });
+      }
+
+      // Given a new state, update the UI to reflect the state
+      function onStateChanged(state) {
+        updateTable('log', state.log);
+        updateTable('dirty-page-table', state.dirty_page_table);
+        updateTable('transaction-table', state.txn_table);
+        updateTable('buffer-pool', state.buffer_pool);
+        updateTable('disk', state.disk);
+      }
+
       // TODO(mwhittaker): Parse operations from the user.
       var ops = [
         new aries.Op.Write("1", "A", "foo"),
@@ -21,9 +216,10 @@
         new aries.Op.Write("2", "B", "foo"),
         new aries.Op.Write("3", "A", "foo"),
       ];
-      aries.simulate(ops);
+
+      // Start the aries simulator
+      aries.simulate(ops, onStateChanged);
+
     </script>
-  </head>
-  <body>
   </body>
 </html>
