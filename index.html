@@ -201,20 +201,20 @@
 
       // TODO(mwhittaker): Parse operations from the user.
       var ops = [
-        new aries.Op.Write("1", "A", "foo"),
-        new aries.Op.Write("2", "B", "foo"),
+        new aries.Op.Write("1", "A", "one"),
+        new aries.Op.Write("2", "B", "two"),
         new aries.Op.Flush("B"),
-        new aries.Op.Write("3", "C", "foo"),
+        new aries.Op.Write("3", "C", "three"),
         new aries.Op.Flush("C"),
         new aries.Op.Checkpoint(),
-        new aries.Op.Write("2", "D", "foo"),
-        new aries.Op.Write("1", "A", "foo"),
+        new aries.Op.Write("2", "D", "four"),
+        new aries.Op.Write("1", "A", "five"),
         new aries.Op.Commit("1"),
-        new aries.Op.Write("3", "C", "foo"),
-        new aries.Op.Write("2", "D", "foo"),
+        new aries.Op.Write("3", "C", "six"),
+        new aries.Op.Write("2", "D", "seven"),
         new aries.Op.Flush("D"),
-        new aries.Op.Write("2", "B", "foo"),
-        new aries.Op.Write("3", "A", "foo"),
+        new aries.Op.Write("2", "B", "eight"),
+        new aries.Op.Write("3", "A", "nine"),
       ];
 
       // Start the ARIES simulator.
