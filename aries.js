@@ -760,6 +760,14 @@ aries.undo = function(states) {
     state.log.push(new aries.Log.CLR(clr_lsn, loser_entry.txn_id,
           loser_entry.page_id, undo_next_lsn, after, prev_lsn));
 
+    // Undo the log entry.
+    aries.pin(state, loser_entry.page_id);
+    state.buffer_pool[loser_entry.page_id].page_lsn = clr_lsn;
+    state.buffer_pool[loser_entry.page_id].value = after;
+
+    // Update the transaction table.
+    state.txn_table[loser_entry.txn_id].last_lsn = clr_lsn;
+
     if (typeof undo_next_lsn !== "undefined") {
       // Update the loser transactions.
       losers.push(undo_next_lsn);
