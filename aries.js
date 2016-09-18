@@ -757,7 +757,7 @@ aries.undo = function(states) {
     var undo_next_lsn = loser_entry.prev_lsn;
     var after = loser_entry.before;
     var prev_lsn = aries.last_lsn(state, loser_entry.txn_id);
-    state.log.push(new aries.Log.CLR(clr_lsn, loser_entry.txn_ind,
+    state.log.push(new aries.Log.CLR(clr_lsn, loser_entry.txn_id,
           loser_entry.page_id, undo_next_lsn, after, prev_lsn));
 
     if (typeof undo_next_lsn !== "undefined") {
