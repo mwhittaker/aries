@@ -534,9 +534,12 @@ aries.process_flush = function(state, flush) {
   delete state.dirty_page_table[flush.page_id];
 }
 
-// `aries.forward_process(state: State, ops: Operation list)` processes a
-// sequence of operations during normal database operation.
-aries.forward_process = function(state, ops, onStateChanged) {
+// `aries.forward_process(states: aries.State list, ops: aries.Op.Operation
+// list)` processes a sequence of operations during normal database operation.
+// Starting with `states[states.length - 1]`, `forward_process` iteratively
+// applies an operation to create a new state and appends it to states.
+aries.forward_process = function(states, ops) {
+  var state = aries.deep_copy(states[states.length - 1]);
   for (var i = 0; i < ops.length; i++) {
     var op = ops[i];
     if (op.type === aries.Op.Type.WRITE) {
@@ -551,19 +554,19 @@ aries.forward_process = function(state, ops, onStateChanged) {
       console.assert(false, "Invalid operation type: " + op.type +
                      " in operation " + op);
     }
-    onStateChanged(state);
+    states.push(state);
+    state = aries.deep_copy(state);
   }
 }
 
 // Crash ///////////////////////////////////////////////////////////////////////
 // `aries.crash(state: State)` simulates ARIES crashing by clearing all
 // non-ephemeral data.
-aries.crash = function(state, onStateChanged) {
+aries.crash = function(state) {
   state.log = state.log.slice(0, state.num_flushed);
   state.dirty_page_table = {};
   state.txn_table = {};
   state.buffer_pool = {};
-  onStateChanged(state);
 }
 
 // Analysis ////////////////////////////////////////////////////////////////////
@@ -619,9 +622,12 @@ aries.analysis_checkpoint = function(state, checkpoint) {
   state.txn_table = aries.deep_copy(checkpoint.txn_table);
 }
 
-// `aries.analysis(state: State, ops: Operation list)` simulates the analysis
-// phase of ARIES.
-aries.analysis = function(state, onStateChanged) {
+// `aries.analysis(states: aries.State list, ops: aries.Op.Operation list)`
+// simulates the analysis phase of ARIES.  Starting with `states[states.length
+// - 1]`, `analysis` iteratively applies analyzes a log entry to create a new
+// state and appends it to states.
+aries.analysis = function(states) {
+  var state = aries.deep_copy(states[states.length - 1]);
   var start_lsn = aries.latest_checkpoint_lsn(state);
   for (var i = start_lsn; i < state.log.length; i++) {
     var log_entry = state.log[i];
@@ -639,7 +645,8 @@ aries.analysis = function(state, onStateChanged) {
       console.assert(false, "Invalid log type: " + log_entry.type +
                      " in operation " + log_entry);
     }
-    onStateChanged(state);
+    states.push(state);
+    state = aries.deep_copy(state);
   }
 }
 
@@ -689,9 +696,12 @@ aries.redo_checkpoint = function(state, checkpoint) {
   // Checkpoints are not redone.
 }
 
-// `aries.redo(state: State, ops: Operation list)` simulates the redo phase of
-// ARIES.
-aries.redo = function(state, onStateChanged) {
+// `aries.redo(states: aries.State list, ops: aries.Op.Operation list)`
+// simulates the redo phase of ARIES.  Starting with `states[states.length -
+// 1]`, `redo` iteratively redoes log entries to create a new state and appends
+// it to states.
+aries.redo = function(states) {
+  var state = aries.deep_copy(states[states.length - 1]);
   var start_lsn = aries.min_rec_lsn(state);
   if (typeof start_lsn === "undefined") {
     // If there are no dirty pages, then we have nothing to redo!
@@ -714,14 +724,19 @@ aries.redo = function(state, onStateChanged) {
       console.assert(false, "Invalid log type: " + log_entry.type +
                      " in operation " + log_entry);
     }
-    onStateChanged(state);
+    states.push(state);
+    state = aries.deep_copy(state);
   }
 }
 
 // Undo ////////////////////////////////////////////////////////////////////////
-// `aries.undo(state: State, ops: Operation list)` simulates the undo phase of
-// ARIES.
-aries.undo = function(state, onStateChanged) {
+// `aries.undo(states: aries.State list, ops: aries.Op.Operation list)`
+// simulates the undo phase of ARIES.  Starting with `states[states.length -
+// 1]`, `undo` iteratively undoes log entries to create a new state and appends
+// it to states.
+aries.undo = function(states) {
+  var state = aries.deep_copy(states[states.length - 1]);
+
   var losers = [];
   for (var page_id in state.txn_table) {
     losers.push(state.txn_table[page_id].last_lsn);
@@ -755,27 +770,35 @@ aries.undo = function(state, onStateChanged) {
                                    clr_lsn));
       delete state.txn_table[loser_entry.txn_id];
     }
-    onStateChanged(state);
+    states.push(state);
+    state = aries.deep_copy(state);
   }
 }
 
 // Main ////////////////////////////////////////////////////////////////////////
-// `aries.simulate(ops: aries.Op.Operation list)` Simulate the execution of
-// ARIES on `ops`.
-aries.simulate = function(ops, onStateChanged) {
+// `aries.simulate(ops: aries.Op.Operation list)` simulates the execution of
+// ARIES on the list of operations `ops`. `simulate` returns a list of
+// aries.States: each one produced from the last by processing an operation (as
+// part of the forward processing phase) or by processing a log entry (as part
+// of the analysis, redo, or undo phase).
+aries.simulate = function(ops) {
   var log = [];
   var num_flushed = 0;
   var txn_table = {};
   var dirty_page_table = {};
   var buffer_pool = {};
   var disk = {};
-  var state = new aries.State(log, num_flushed, txn_table, dirty_page_table,
-                              buffer_pool, disk);
+  var initial_state = new aries.State(log, num_flushed, txn_table,
+                                      dirty_page_table, buffer_pool, disk);
+  var states = [initial_state]
 
-  aries.init(state, ops);
-  aries.forward_process(state, ops, onStateChanged);
-  aries.crash(state, onStateChanged);
-  aries.analysis(state, onStateChanged);
-  aries.redo(state, onStateChanged);
-  aries.undo(state, onStateChanged);
+  aries.init(initial_state, ops);
+  aries.forward_process(states, ops);
+  var crash_state = aries.deep_copy(states[states.length - 1]);
+  aries.crash(crash_state);
+  states.push(crash_state);
+  aries.analysis(states);
+  aries.redo(states);
+  aries.undo(states);
+  return states;
 }

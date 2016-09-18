@@ -217,9 +217,11 @@
         new aries.Op.Write("3", "A", "foo"),
       ];
 
-      // Start the aries simulator
-      aries.simulate(ops, onStateChanged);
-
+      // Start the ARIES simulator.
+      var states = aries.simulate(ops);
+      for (var state of states) {
+        onStateChanged(state);
+      }
     </script>
   </body>
 </html>
