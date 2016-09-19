@@ -22,6 +22,13 @@
     </style>
   </head>
   <body>
+    <div>
+      <span>Controls:</span>
+      <button id="left-arrow">&lt;</button>
+      <button id="right-arrow">&gt;</button>
+      <span>(or use left and right arrow keys)</span>
+    </div>
+
     <div class="width-30">
       <div>
         <h2>Log</h2>
@@ -233,9 +240,42 @@
 
       // Start the ARIES simulator.
       var states = aries.simulate(ops);
-      for (var state of states) {
-        onStateChanged(state);
+      var currStateIdx = 0;
+
+      // Renders previous state
+      function renderPrevState() {
+        if (currStateIdx > 0) {
+          onStateChanged(states[--currStateIdx]);
+        }
       }
+
+      // Renders next state
+      function renderNextState() {
+        if (currStateIdx < states.length - 1) {
+          onStateChanged(states[++currStateIdx]);
+        }
+      }
+
+      // Transition between states when left or right arrow keys are pressed
+      document.addEventListener('keydown', function(event) {
+        if (event.keyCode === 37) { // left arrow
+          renderPrevState();
+        } else if (event.keyCode === 39) { // right arrow
+          renderNextState();
+        }
+      }, false);
+
+      // Transition to previous state when left arrow button is clicked
+      var left_arrow = document.getElementById('left-arrow');
+      left_arrow.addEventListener('click', function(event) {
+        renderPrevState();
+      }, false);
+
+      // Transition to next state when right arrow button is clicked
+      var right_arrow = document.getElementById('right-arrow');
+      right_arrow.addEventListener('click', function(event) {
+        renderNextState();
+      }, false);
     </script>
   </body>
 </html>
