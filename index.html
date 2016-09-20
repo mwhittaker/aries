@@ -21,30 +21,66 @@ By Larry Xu and Michael Whittaker
     <title>ARIES</title>
     <script src="https://d3js.org/d3.v4.min.js"></script>
     <script src="aries.js"></script>
+    <link rel="stylesheet" href="normalize.css">
     <style>
+      body {
+        min-width: 900px;
+      }
+
+      header {
+        padding: 10px 2.5%;
+        background: antiquewhite;
+      }
+
       .width-30 {
         width: 30%;
         margin: 0 1.25% 0 1.25%;
         float: left;
       }
 
+      .width-30:first-of-type {
+        margin-left: 2.5%;
+      }
+
+      .width-30:last-of-type {
+        margin-right: 2.5%;
+      }
+
       table {
         border-spacing: 0;
         border-collapse: collapse;
+        width: 100%;
+      }
+
+      thead tr {
+        background: bisque;
+      }
+
+      tr.new-row {
+        background: lightgreen;
+      }
+
+      tr.updated-row {
+        background: lightskyblue;
       }
 
       th, td {
         border: 1px solid black;
+        padding: 3px;
+      }
+
+      td.updated-cell {
+        background: deepskyblue;
       }
     </style>
   </head>
   <body>
-    <div>
+    <header>
       <span>Controls:</span>
       <button id="left-arrow">&lt;</button>
       <button id="right-arrow">&gt;</button>
       <span>(or use left and right arrow keys)</span>
-    </div>
+    </header>
 
     <div class="width-30">
       <div>
@@ -54,7 +90,7 @@ By Larry Xu and Michael Whittaker
           <thead>
             <tr>
               <th>LSN</th>
-              <th>Transaction ID</th>
+              <th>Trans ID</th>
               <th>Type</th>
               <th>Page ID</th>
               <th>prevLSN</th>
@@ -86,7 +122,7 @@ By Larry Xu and Michael Whittaker
         <table id="transaction-table">
           <thead>
             <tr>
-              <th>Transaction ID</th>
+              <th>Trans ID</th>
               <th>Status</th>
               <th>lastLSN</th>
             </tr>
@@ -169,7 +205,7 @@ By Larry Xu and Michael Whittaker
                              .data(data, function(d) {
                                return d ? d[key] : this.id;
                              })
-                             .style('color', 'black');
+                             .attr('class', '');
 
         updated_rows.exit().remove();
 
@@ -179,16 +215,13 @@ By Larry Xu and Michael Whittaker
                                     return row[column];
                                   });
                                 })
-                                .style('font-weight', function(d) {
-                                  if (d !== this.__oldData__) {
-                                    return 'bold';
-                                  }
-                                  return 'normal';
+                                .attr('class', function(d) {
+                                  return (d !== this.__oldData__) ? 'updated-cell' : '';
                                 })
                                 .property('__oldData__', function(d) {
                                   if (d !== this.__oldData__) {
                                     d3.select(this.parentNode)
-                                      .style('color', 'blue');
+                                      .attr('class', 'updated-row');
                                   }
                                   return d;
                                 })
@@ -199,7 +232,7 @@ By Larry Xu and Michael Whittaker
                                    .attr('id', function(d) {
                                      return d[key]
                                    })
-                                   .style('color', 'green');
+                                   .attr('class', 'new-row');
 
         new_rows.selectAll('td')
                 .data(function(row) {
