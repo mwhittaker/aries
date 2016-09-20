@@ -451,7 +451,7 @@ aries.page_lsn = function(state, page_id) {
 aries.init = function(state, ops) {
   var page_ids = aries.pages_accessed(ops);
   for (var i = 0; i < page_ids.length; i++) {
-    state.disk[page_ids[i]] = new aries.Page(-1, "");
+    state.disk[page_ids[i]] = new aries.Page(-1, "\u22A5");
   }
 }
 
