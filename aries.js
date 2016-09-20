@@ -283,26 +283,107 @@ aries.Page = function(page_lsn, value) {
 // State.
 //
 // The state of ARIES is the aggregate of the log, transaction table, dirty
-// page table, buffer pool, and disk. The state also includes
+// page table, buffer pool, and disk. In addition to the state of the
+// algorithm, we also want to keep track of various bits of metadata that is
+// useful for the front end. For example, we may want to keep track of which
+// phase of the algorithm we are in, or keep track of our position in the
+// operation list. All these things are also included in the state.
 //
-// - `num_flushed`: the number of log entries that have been flushed to disk.
+//   type aries.Phase =
+//     | NORMAL
+//     | ANALYSIS
+//     | REDO
+//     | UNDO
+//     | CRASHED
 //
 //   type state = {
+//     // The phase the algorithm is currently in.
+//     phase: aries.Phase,
+//
+//     // A set of descriptive message on what the current state of the system
+//     // is and how the state changed since the last state. For example, if we
+//     // just processed an update log record and introduced a new entry to the
+//     // transaction table, we might include a message like "This update is
+//     // first update of transaction A, so it is inserted into the transaction
+//     // table."
+//     explanation: string list,
+//
+//     // The list of operations parsed from the user.
+//     ops: aries.Op.Operation list,
+//
+//     // The number of operations that have been processed. When ARIES begins,
+//     // this will be 0. After ARIES crashes, this will be equal to the number
+//     // of operations.
+//     num_ops_processed: number,
+//
+//     // The log.
 //     log: aries.Log.Entry list,
+//
+//     // The number of log entries that have been flushed to disk.
 //     num_flushed: number,
+//
+//     // The log looks like this:
+//     //
+//     //     +---------+
+//     //     |    0    |
+//     //     +---------+
+//     //     |    1    |
+//     //     +---------+
+//     //     |    2    |
+//     //     +---------+
+//     //
+//     // At various points in time, ARIES is scanning through the log. For
+//     // example, during the analysis phase, ARIES scans forward through the
+//     // log. After it has scanned through two of the entries and is about to
+//     // scan the third, we can draw the position of the ARIES algorithm like
+//     // this:
+//     //
+//     //     +---------+
+//     //     |    0    |
+//     //     +---------+
+//     //     |    1    |
+//     //     +---------+ <----- position = 2
+//     //     |    2    |
+//     //     +---------+
+//     //
+//     // `log_position` is the number of entries the position should point
+//     // after. Here, the position is 2 because it's pointing right after 2
+//     // elements. If `log_position` is undefined, then no pointer should be
+//     // shown.
+//     log_position: number,
+//
+//     // The transaction table.
 //     txn_table: TxnTable,
+//
+//     // The dirty page table.
 //     dirty_page_table: DirtyPageTable,
+//
+//     // The buffer pool.
 //     buffer_pool: BufferPool,
+//
+//     // The disk.
 //     disk: Disk,
 //   }
-aries.State = function(log, num_flushed, txn_table, dirty_page_table,
-                       buffer_pool, disk) {
-  this.log = log;
-  this.num_flushed = num_flushed;
-  this.txn_table = txn_table;
-  this.dirty_page_table = dirty_page_table;
-  this.buffer_pool = buffer_pool;
-  this.disk = disk;
+aries.Phase = {
+  NORMAL:   "normal",
+  ANALYSIS: "analysis",
+  REDO:     "redo",
+  UNDO:     "undo",
+  CRASHED:  "crashed",
+}
+
+aries.State = function(ops) {
+  this.phase = aries.Phase.NORMAL;
+  this.explanation = [];
+  this.ops = ops;
+  this.num_ops_processed = 0;
+  this.log = [];
+  this.num_flushed = 0;
+  this.log_position = undefined;
+  this.txn_table = {};
+  this.dirty_page_table = {};
+  this.buffer_pool = {};
+  this.disk = {};
 }
 
 // Helper Functions ////////////////////////////////////////////////////////////
@@ -554,6 +635,7 @@ aries.forward_process = function(states, ops) {
       console.assert(false, "Invalid operation type: " + op.type +
                      " in operation " + op);
     }
+    state.num_ops_processed += 1;
     states.push(state);
     state = aries.deep_copy(state);
   }
@@ -563,6 +645,7 @@ aries.forward_process = function(states, ops) {
 // `aries.crash(state: State)` simulates ARIES crashing by clearing all
 // non-ephemeral data.
 aries.crash = function(state) {
+  state.phase = aries.Phase.CRASHED;
   state.log = state.log.slice(0, state.num_flushed);
   state.dirty_page_table = {};
   state.txn_table = {};
@@ -628,6 +711,9 @@ aries.analysis_checkpoint = function(state, checkpoint) {
 aries.analysis = function(states) {
   var state = aries.deep_copy(states[states.length - 1]);
   var start_lsn = aries.latest_checkpoint_lsn(state);
+  state.phase = aries.Phase.ANALYSIS;
+  state.log_position = start_lsn;
+
   for (var i = start_lsn; i < state.log.length; i++) {
     var log_entry = state.log[i];
     if (log_entry.type === aries.Log.Type.UPDATE) {
@@ -644,6 +730,7 @@ aries.analysis = function(states) {
       console.assert(false, "Invalid log type: " + log_entry.type +
                      " in operation " + log_entry);
     }
+    state.log_position += 1;
     states.push(state);
     state = aries.deep_copy(state);
   }
@@ -711,6 +798,9 @@ aries.redo_checkpoint = function(state, checkpoint) {
 aries.redo = function(states) {
   var state = aries.deep_copy(states[states.length - 1]);
   var start_lsn = aries.min_rec_lsn(state);
+  state.phase = aries.Phase.REDO;
+  state.log_position = start_lsn;
+
   if (typeof start_lsn === "undefined") {
     // If there are no dirty pages, then we have nothing to redo!
     return;
@@ -732,6 +822,7 @@ aries.redo = function(states) {
       console.assert(false, "Invalid log type: " + log_entry.type +
                      " in operation " + log_entry);
     }
+    state.log_position += 1;
     states.push(state);
     state = aries.deep_copy(state);
   }
@@ -744,6 +835,7 @@ aries.redo = function(states) {
 // it to states.
 aries.undo = function(states) {
   var state = aries.deep_copy(states[states.length - 1]);
+  state.phase = aries.Phase.UNDO;
 
   var losers = [];
   for (var page_id in state.txn_table) {
@@ -786,6 +878,8 @@ aries.undo = function(states) {
                                    clr_lsn));
       delete state.txn_table[loser_entry.txn_id];
     }
+
+    state.log_position = loser_entry.lsn;
     states.push(state);
     state = aries.deep_copy(state);
   }
@@ -798,14 +892,7 @@ aries.undo = function(states) {
 // part of the forward processing phase) or by processing a log entry (as part
 // of the analysis, redo, or undo phase).
 aries.simulate = function(ops) {
-  var log = [];
-  var num_flushed = 0;
-  var txn_table = {};
-  var dirty_page_table = {};
-  var buffer_pool = {};
-  var disk = {};
-  var initial_state = new aries.State(log, num_flushed, txn_table,
-                                      dirty_page_table, buffer_pool, disk);
+  var initial_state = new aries.State(ops);
   var states = [initial_state]
 
   aries.init(initial_state, ops);
