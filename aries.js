@@ -130,6 +130,108 @@ aries.Op.Checkpoint = function() {
   aries.Op.Operation.call(this, aries.Op.Type.CHECKPOINT);
 }
 
+// `aries.Op.parse_op(s: string) -> Parsimmon parser` returns a parser that can
+// parse an operation from a string using the following grammar.
+//
+//   alpha     ::= ([a-z] | [A-Z])
+//   num       ::= [0-9]
+//   alphanums ::= (alpha | num)+
+//   txn_id    ::= alphanums
+//   page_id   ::= alphanums
+//   value     ::= alphanums
+//
+//   op ::=
+//     | W_<txn_id>(<page_id>, <value>)
+//     | Commit_<txn_id>()
+//     | Flush(<page_id>)
+//     | Checkpoint()
+//
+// This function assumes that the Parsimmon library is loaded.
+aries.Op.parse_op = function() {
+  var P = Parsimmon;
+
+  var underscore = P.string("_");
+  var lparen = P.string("(");
+  var rparen = P.string(")");
+  var comma = P.string(",");
+
+  var alphanums = P.alt(P.letter, P.digit).atLeast(1).map(function(xs) {
+    return xs.join("");
+  });
+  var txn_id = alphanums;
+  var page_id = alphanums;
+  var value = alphanums;
+
+  var write = P.seqMap(
+    P.string("W").then(underscore),
+    txn_id,
+    P.optWhitespace.then(lparen).then(P.optWhitespace),
+    page_id,
+    comma.then(P.optWhitespace),
+    value,
+    P.optWhitespace.then(rparen),
+    function(_, txn_id, _, page_id, _, value, _) {
+      return new aries.Op.Write(txn_id, page_id, value);
+    }
+  );
+
+  var commit = P.seqMap(
+    P.string("Commit").then(underscore),
+    txn_id,
+    P.optWhitespace.then(lparen).then(P.optWhitespace).then(rparen),
+    function(_, txn_id,_) {
+      return new aries.Op.Commit(txn_id);
+    }
+  );
+
+  var flush = P.seqMap(
+    P.string("Flush").then(P.optWhitespace).then(lparen).then(P.optWhitespace),
+    page_id,
+    P.optWhitespace.then(rparen),
+    function(_, page_id, _) {
+      return new aries.Op.Flush(page_id);
+    }
+  );
+
+  var checkpoint = P.string("Checkpoint")
+                    .then(P.optWhitespace)
+                    .then(lparen)
+                    .then(P.optWhitespace)
+                    .then(rparen).map(function(_) {
+                      return new aries.Op.Checkpoint()
+                    });
+
+  return P.alt(write, commit, flush, checkpoint);
+}
+
+// `aries.Op.parse_ops(s: string) -> aries.Op.Operation list` parses a list of
+// operations from a string using the following grammar.
+//
+//   ops ::= (op,)*(op,?)?
+aries.Op.parse_ops = function(s) {
+  var P = Parsimmon;
+  var comma = P.string(",");
+  var op = aries.Op.parse_op();
+  var ops = P.seqMap(
+      P.optWhitespace
+       .then(op)
+       .skip(P.optWhitespace)
+       .skip(comma)
+       .skip(P.optWhitespace)
+       .atLeast(0),
+      P.optWhitespace
+       .then(op)
+       .skip(P.optWhitespace)
+       .skip(comma.atMost(1))
+       .skip(P.optWhitespace)
+       .atMost(1),
+      function(head, tail) {
+        return head.concat(tail);
+      }
+  )
+  return ops.parse(s);
+}
+
 // Log.
 //
 // The main ARIES data structure is a log. As ARIES runs, it appends log

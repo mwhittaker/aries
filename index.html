@@ -20,6 +20,7 @@ By Larry Xu and Michael Whittaker
   <head>
     <title>ARIES</title>
     <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script src="https://rawgit.com/jneen/parsimmon/master/src/parsimmon.js"></script>
     <script src="aries.js"></script>
     <link rel="stylesheet" href="normalize.css">
     <style>
@@ -270,23 +271,27 @@ By Larry Xu and Michael Whittaker
         updateValue('lsn-flushed', state.num_flushed - 1);
       }
 
-      // TODO(mwhittaker): Parse operations from the user.
-      var ops = [
-        new aries.Op.Write("1", "A", "one"),
-        new aries.Op.Write("2", "B", "two"),
-        new aries.Op.Flush("B"),
-        new aries.Op.Write("3", "C", "three"),
-        new aries.Op.Flush("C"),
-        new aries.Op.Checkpoint(),
-        new aries.Op.Write("2", "D", "four"),
-        new aries.Op.Write("1", "A", "five"),
-        new aries.Op.Commit("1"),
-        new aries.Op.Write("3", "C", "six"),
-        new aries.Op.Write("2", "D", "seven"),
-        new aries.Op.Flush("D"),
-        new aries.Op.Write("2", "B", "eight"),
-        new aries.Op.Write("3", "A", "nine"),
-      ];
+      // TODO(larry): Parse operations from the UI.
+      var input =
+        "W_1(A, one)," + // new aries.Op.Write("1", "A", "one"),
+        "W_2(B, two)," + // new aries.Op.Write("2", "B", "two"),
+        "Flush(B)," + // new aries.Op.Flush("B"),
+        "W_3(C, three)," + // new aries.Op.Write("3", "C", "three"),
+        "Flush(C)," + // new aries.Op.Flush("C"),
+        "Checkpoint()," + // new aries.Op.Checkpoint(),
+        "W_2(D, four)," + // new aries.Op.Write("2", "D", "four"),
+        "W_1(A, five)," + // new aries.Op.Write("1", "A", "five"),
+        "Commit_1()," + // new aries.Op.Commit("1"),
+        "W_3(C, six)," + // new aries.Op.Write("3", "C", "six"),
+        "W_2(D, seven)," + // new aries.Op.Write("2", "D", "seven"),
+        "Flush(D)," + // new aries.Op.Flush("D"),
+        "W_2(B, eight)," + // new aries.Op.Write("2", "B", "eight"),
+        "W_3(A, nine)";   // new aries.Op.Write("3", "A", "nine"),
+      var ops_result = aries.Op.parse_ops(input);
+      if (!ops_result.status) {
+        console.assert(false, Parsimmon.formatError(input, ops_result));
+      }
+      var ops = ops_result.value;
 
       // Start the ARIES simulator.
       var states = aries.simulate(ops);
