@@ -19,10 +19,18 @@ By Larry Xu and Michael Whittaker
 <html>
   <head>
     <title>ARIES</title>
+
     <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.4.2/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vex-js/3.0.0/js/vex.combined.min.js"></script>
+    <script>vex.defaultOptions.className = 'vex-theme-default'</script>
     <script src="https://rawgit.com/jneen/parsimmon/master/src/parsimmon.js"></script>
     <script src="aries.js"></script>
+
     <link rel="stylesheet" href="normalize.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vex-js/3.0.0/css/vex.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vex-js/3.0.0/css/vex-theme-default.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" />
     <style>
       body {
         min-width: 900px;
@@ -73,14 +81,101 @@ By Larry Xu and Michael Whittaker
       td.updated-cell {
         background: deepskyblue;
       }
+
+      ul#commands {
+        list-style-type: none;
+        padding: 0;
+        width: 250px;
+        height: 150px;
+        overflow-y: scroll;
+        background: white;
+        border: 1px solid black;
+      }
+
+      ul#commands li {
+        padding: 6px 8px;
+        border-bottom: 1px solid black;
+      }
+
+      ul#commands li:last-of-type {
+        border: 0;
+      }
+
+      ul#commands li:hover {
+        background: #f3f3f3;
+      }
+
+      ul#commands li i {
+        float: right;
+        margin-right: 5px;
+        display: none;
+        cursor: pointer;
+      }
+
+      ul#commands li i.edit {
+        color: green;
+      }
+
+      ul#commands li i.remove {
+        color: red;
+      }
+
+      ul#commands.editable li {
+        cursor: move;
+      }
+
+      ul#commands.editable li:hover i {
+        display: initial;
+      }
+
+      #sub-controls {
+        margin-top: 15px;
+      }
+
+      button {
+        background: #3288e6;
+        color: white;
+        border: 0;
+        padding: 6px 8px;
+        cursor: pointer;
+      }
+
+      button:disabled,
+      button:hover:disabled {
+        background: #8dbdf1;
+        cursor: not-allowed;
+      }
+
+      button:hover {
+        background: #1f66b4;
+      }
+
+      .hidden {
+        display: none;
+      }
     </style>
   </head>
   <body>
     <header>
-      <span>Controls:</span>
-      <button id="left-arrow">&lt;</button>
-      <button id="right-arrow">&gt;</button>
-      <span>(or use left and right arrow keys)</span>
+      <h4>Commands</h4>
+      <div id="modes">
+        <button id="run">Run&nbsp;&nbsp;<i class="fa fa-play"></i></button>
+        <button id="edit">Edit&nbsp;&nbsp;<i class="fa fa-pencil"></i></button>
+      </div>
+      <div id="sub-controls">
+        <div id="sub-controls-run">
+          <span>Controls:</span>
+          <button id="left-arrow"><i class="fa fa-chevron-left"></i></button>
+          <button id="right-arrow"><i class="fa fa-chevron-right"></i></button>
+          <span>(or use left and right arrow keys)</span>
+        </div>
+        <div id="sub-controls-edit" class="hidden">
+          <span>Append new command</span>
+          <button id="new-command"><i class="fa fa-plus"></i></button>
+        </div>
+      </div>
+      <ul id="commands">
+      </ul>
     </header>
 
     <div class="width-30">
@@ -271,31 +366,62 @@ By Larry Xu and Michael Whittaker
         updateValue('lsn-flushed', state.num_flushed - 1);
       }
 
-      // TODO(larry): Parse operations from the UI.
-      var input =
-        "W_1(A, one)," + // new aries.Op.Write("1", "A", "one"),
-        "W_2(B, two)," + // new aries.Op.Write("2", "B", "two"),
-        "Flush(B)," + // new aries.Op.Flush("B"),
-        "W_3(C, three)," + // new aries.Op.Write("3", "C", "three"),
-        "Flush(C)," + // new aries.Op.Flush("C"),
-        "Checkpoint()," + // new aries.Op.Checkpoint(),
-        "W_2(D, four)," + // new aries.Op.Write("2", "D", "four"),
-        "W_1(A, five)," + // new aries.Op.Write("1", "A", "five"),
-        "Commit_1()," + // new aries.Op.Commit("1"),
-        "W_3(C, six)," + // new aries.Op.Write("3", "C", "six"),
-        "W_2(D, seven)," + // new aries.Op.Write("2", "D", "seven"),
-        "Flush(D)," + // new aries.Op.Flush("D"),
-        "W_2(B, eight)," + // new aries.Op.Write("2", "B", "eight"),
-        "W_3(A, nine)";   // new aries.Op.Write("3", "A", "nine"),
-      var ops_result = aries.Op.parse_ops(input);
-      if (!ops_result.status) {
-        console.assert(false, Parsimmon.formatError(input, ops_result));
-      }
-      var ops = ops_result.value;
+      // Update the current UI mode
+      function updateMode(newMode) {
+        mode = newMode; // sets global 'mode' variable
 
-      // Start the ARIES simulator.
-      var states = aries.simulate(ops);
-      var currStateIdx = 0;
+        // Toggle the correct mode button
+        d3.select('div#modes')
+          .selectAll('button')
+          .attr('disabled', null);
+        d3.select('div#modes')
+          .selectAll('button#' + mode)
+          .attr('disabled', true);
+
+        // Toggle the correct sub controls
+        d3.select('div#sub-controls')
+          .selectAll('div')
+          .attr('class', 'hidden');
+        d3.select('div#sub-controls')
+          .select('div#sub-controls-' + mode)
+          .attr('class', null);
+
+        // Enable/disable editing the command list
+        if (mode === 'run') {
+          command_list.option('disabled', true);
+          d3.select('ul#commands').attr('class', null);
+          resetAries();
+        } else {
+          command_list.option('disabled', false);
+          d3.select('ul#commands').attr('class', 'editable');
+        }
+      }
+
+      // Append a new command to the current command list
+      function appendCommand(command) {
+        var el = document.createElement('li');
+        el.innerHTML = '<span>' + command + '</span>' +
+                       '<i class="fa fa-times remove"></i>' +
+                       '<i class="fa fa-pencil edit"></i>';
+        el.dataset.id = command;
+        command_list.el.appendChild(el);
+        command_list.save();
+      }
+
+      // Parse input commands and reset ARIES state
+      function resetAries() {
+        var input = command_list.toArray().join(',');
+        var ops_result = aries.Op.parse_ops(input);
+        if (!ops_result.status) {
+          console.assert(false, Parsimmon.formatError(input, ops_result));
+        }
+        var ops = ops_result.value;
+
+        // Start the ARIES simulator.
+        states = aries.simulate(ops);
+        currStateIdx = 0;
+        onStateChanged(states[currStateIdx]);
+      }
 
       // Renders previous state
       function renderPrevState() {
@@ -311,26 +437,127 @@ By Larry Xu and Michael Whittaker
         }
       }
 
+
+      /**
+       * Event listeners
+       */
+
+      // Set UI to run mode
+      var run_button = document.getElementById('run');
+      run_button.addEventListener('click', function(event) {
+        updateMode("run");
+      }, false);
+
+      // Set UI to edit mode
+      var edit_button = document.getElementById('edit');
+      edit_button.addEventListener('click', function(event) {
+        updateMode("edit");
+      }, false);
+
       // Transition between states when left or right arrow keys are pressed
       document.addEventListener('keydown', function(event) {
-        if (event.keyCode === 37) { // left arrow
-          renderPrevState();
-        } else if (event.keyCode === 39) { // right arrow
-          renderNextState();
+        if (mode === "run") {
+          if (event.keyCode === 37) { // left arrow
+            renderPrevState();
+          } else if (event.keyCode === 39) { // right arrow
+            renderNextState();
+          }
         }
       }, false);
 
       // Transition to previous state when left arrow button is clicked
       var left_arrow = document.getElementById('left-arrow');
       left_arrow.addEventListener('click', function(event) {
-        renderPrevState();
+        if (mode === "run") {
+          renderPrevState();
+        }
       }, false);
 
       // Transition to next state when right arrow button is clicked
       var right_arrow = document.getElementById('right-arrow');
       right_arrow.addEventListener('click', function(event) {
-        renderNextState();
+        if (mode === "run") {
+          renderNextState();
+        }
       }, false);
+
+      // Open a new command dialog when new command button is clicked
+      var new_command = document.getElementById('new-command');
+      new_command.addEventListener('click', function(event) {
+        vex.dialog.open({
+          message: 'New command:',
+          input: '<input name="command" type="text" required>',
+          callback: function(data) {
+            if (data) {
+              appendCommand(data.command);
+            }
+          }
+        });
+      }, false);
+
+      // Sortable element containing list of commands
+      var commands_el = document.getElementById('commands');
+      var command_list = Sortable.create(commands_el, {
+        filter: '.edit, .remove',
+        onFilter: function (evt) {
+          if (Sortable.utils.is(evt.target, ".remove")) {
+            evt.item.parentNode.removeChild(evt.item);
+            command_list.save();
+          } else if (Sortable.utils.is(evt.target, ".edit")) {
+            vex.dialog.open({
+              message: 'Edit command:',
+              input: '<input name="command" type="text" value="' +
+                     evt.item.dataset.id + '" required>',
+              callback: function(data) {
+                if (data) {
+                  evt.item.firstChild.innerHTML = data.command;
+                  evt.item.dataset.id = data.command;
+                  command_list.save();
+                }
+              }
+            });
+          }
+        }
+      });
+
+
+      /**
+       * Initializer
+       */
+
+      // UI global variables
+      var states,       // list of ARIES states
+          currStateIdx, // index of the current state
+          mode;         // UI mode, either "run" or "edit"
+
+      // Initializes the UI
+      function init() {
+        var starter_commands = [
+          "W_1(A, one)",
+          "W_2(B, two)",
+          "Flush(B)",
+          "W_3(C, three)",
+          "Flush(C)",
+          "Checkpoint()",
+          "W_2(D, four)",
+          "W_1(A, five)",
+          "Commit_1()",
+          "W_3(C, six)",
+          "W_2(D, seven)",
+          "Flush(D)",
+          "W_2(B, eight)",
+          "W_3(A, nine)"
+        ];
+
+        for (var command of starter_commands) {
+          appendCommand(command);
+        }
+
+        // set UI to run mode
+        updateMode("run");
+      }
+
+      init();
     </script>
   </body>
 </html>
