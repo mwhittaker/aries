@@ -1174,6 +1174,12 @@ aries.undo = function(states) {
     state = aries.deep_copy(state);
     state.explanation = [];
   }
+
+  state.explanation = [
+    "ARIES finished! The effects of all committed transactions have been " +
+    "applied, and the effects of all aborted transactions have been reverted."
+  ];
+  states.push(state);
 }
 
 // Main ////////////////////////////////////////////////////////////////////////
