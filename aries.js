@@ -130,6 +130,26 @@ aries.Op.Checkpoint = function() {
   aries.Op.Operation.call(this, aries.Op.Type.CHECKPOINT);
 }
 
+// `aries.Op.explain(op: aries.Op.Operation) -> string` returns an English
+// description of the operation. For example, `aries.Op.explain({type: WRITE,
+// txn_id:"1", page_id:"A", value:"foo"})` might return "Transaction 1 wrote
+// "foo" to page A".
+aries.Op.explain = function(op) {
+  if (op.type === aries.Op.Type.WRITE) {
+    return "Transaction " + op.txn_id + " wrote '" + op.value + "' to page " +
+      op.page_id + ".";
+  } else if (op.type === aries.Op.Type.COMMIT) {
+    return "Transaction " + op.txn_id + " committed."
+  } else if (op.type === aries.Op.Type.CHECKPOINT) {
+    return "ARIES checkpointed.";
+  } else if (op.type === aries.Op.Type.FLUSH) {
+    return "Page " + op.page_id + " was flushed.";
+  } else {
+    console.assert(false, "Invalid operation type: " + op.type +
+                   " in operation " + op);
+  }
+}
+
 // `aries.Op.parse_op(s: string) -> Parsimmon parser` returns a parser that can
 // parse an operation from a string using the following grammar.
 //
@@ -557,6 +577,10 @@ aries.pin = function(state, page_id) {
   console.assert(page_id in state.disk);
   if (!(page_id in state.buffer_pool)) {
     state.buffer_pool[page_id] = aries.deep_copy(state.disk[page_id]);
+    state.explanation.push(
+      "Page " + page_id + " was fetched from disk and brought into the " +
+      "buffer pool."
+    );
   }
 }
 
@@ -578,6 +602,14 @@ aries.dirty = function(state, page_id, rec_lsn) {
   console.assert(page_id in state.disk);
   if (!(page_id in state.dirty_page_table)) {
     state.dirty_page_table[page_id] = new aries.DirtyPageTableEntry(rec_lsn);
+    state.explanation.push(
+      "Page " + page_id + " was brought into the dirty page table with recLSN "
+      + rec_lsn + "."
+    );
+  } else {
+    state.explanation.push(
+      "Page " + page_id + " was already in the dirty page table."
+    );
   }
 }
 
@@ -588,6 +620,14 @@ aries.dirty = function(state, page_id, rec_lsn) {
 aries.begin_txn = function(state, txn_id) {
   if (!(txn_id in state.txn_table)) {
     state.txn_table[txn_id] = new aries.TxnTableEntry(undefined, undefined);
+    state.explanation.push(
+      "This is the first operation of transaction " + txn_id + ", so an " +
+      "entry for the transaction is put in the transaction table."
+    );
+  } else {
+    state.explanation.push(
+      "Transaction " + txn_id + " was already in the transaction table."
+    );
   }
 }
 
@@ -636,6 +676,11 @@ aries.init = function(state, ops) {
   for (var i = 0; i < page_ids.length; i++) {
     state.disk[page_ids[i]] = new aries.Page(-1, "\u22A5");
   }
+  state.explanation.push(
+    "ARIES is in its initial state: no operations have been processed, and " +
+    "all in memory data structures are empty. Moreover, all pages on disk " +
+    "are initialized to a dummy pageLSN of -1 and a dummy value \u22A5."
+  );
 }
 
 // Forward Processing //////////////////////////////////////////////////////////
@@ -650,6 +695,11 @@ aries.process_write = function(state, write) {
   var before = state.buffer_pool[write.page_id].value;
   state.buffer_pool[write.page_id].page_lsn = lsn;
   state.buffer_pool[write.page_id].value = write.value;
+  state.explanation.push(
+    "The value of page " + write.page_id + " was updated from '" + before +
+    "' to '" + write.value + "' in the buffer pool, and the pageLSN was " +
+    "updated to " + lsn + "."
+  );
 
   // Update the dirty page table, if necessary.
   aries.dirty(state, write.page_id, lsn);
@@ -664,6 +714,10 @@ aries.process_write = function(state, write) {
   // write update record
   state.log.push(new aries.Log.Update(lsn, write.txn_id, write.page_id,
         before, write.value, prev_lsn));
+  state.explanation.push(
+    "Finally, an update log entry is appended to the log; all write " +
+    "operations generate update log entries."
+  );
 }
 
 // `aries.process_commit(state: State, commit: Operation)` processes a commit
@@ -683,6 +737,13 @@ aries.process_commit = function(state, commit) {
 
   // Clear the transaction from the transaction table.
   delete state.txn_table[commit.txn_id];
+
+  state.explanation.push(
+    "First, we append a commit and end log record to the log. Then, we " +
+    "flush the log and remove transaction " + commit.txn_id + " from the " +
+    "transaction table. The moment the commit log entry is persisted is " +
+    "when the transaction is considered committed."
+  );
 }
 
 // `aries.process_checkpoint(state: State, checkpoint: Operation)` processes a
@@ -693,6 +754,10 @@ aries.process_checkpoint = function(state, checkpoint) {
   state.log.push(new aries.Log.Checkpoint(lsn,
         aries.deep_copy(state.dirty_page_table),
         aries.deep_copy(state.txn_table)));
+  state.explanation.push(
+    "A copy of the dirty page table and transaction table are stored in the " +
+    "checkpoint log entry."
+  );
 }
 
 // `aries.process_flush(state: State, flush: Operation)` processes a flush
@@ -706,8 +771,19 @@ aries.process_flush = function(state, flush) {
     // If the page isn't in the buffer pool, then it must have already been
     // flushed to disk, so we don't have to do anything.
     console.assert(!(flush.page_id in state.dirty_page_table));
+    state.explanation.push(
+      "Page " + flush.page_id + " is not dirty, so the flush is essentially " +
+      "a no-op."
+    );
     return;
   }
+  state.explanation.push(
+    "The pageLSN of page " + flush.page_id + " is " + page_lsn + ". That " +
+    "is, log entry " + page_lsn + " was the most recent log entry to modify " +
+    "page " + flush.page_id + ". To ensure recoverability, we must ensure " +
+    "that every log entry up to and including entry " + page_lsn +
+    " is flushed."
+  );
   aries.flush_log(state, page_lsn);
 
   // Flush the page to disk.
@@ -715,6 +791,12 @@ aries.process_flush = function(state, flush) {
 
   // Clear the dirty page table.
   delete state.dirty_page_table[flush.page_id];
+
+  state.explanation.push(
+    "Finally, we flush page " + flush.page_id + " from the buffer pool to " +
+    "disk, and remove the corresponding entries in the dirty page table and " +
+    "buffer pool."
+  );
 }
 
 // `aries.forward_process(states: aries.State list, ops: aries.Op.Operation
@@ -725,6 +807,7 @@ aries.forward_process = function(states, ops) {
   var state = aries.deep_copy(states[states.length - 1]);
   for (var i = 0; i < ops.length; i++) {
     var op = ops[i];
+    state.explanation = [aries.Op.explain(op)];
     if (op.type === aries.Op.Type.WRITE) {
       aries.process_write(state, op);
     } else if (op.type === aries.Op.Type.COMMIT) {
@@ -752,12 +835,22 @@ aries.crash = function(state) {
   state.dirty_page_table = {};
   state.txn_table = {};
   state.buffer_pool = {};
+  state.explanation = [
+    "ARIES crashed! The in-memory data structures (i.e. the dirty page " +
+    "table, the transaction table, the buffer pool, and the unflushed tail " +
+    "of the log) are all cleared. The only thing that remains is the " +
+    "flushed head of the log and the disk."
+  ];
 }
 
 // Analysis ////////////////////////////////////////////////////////////////////
 // `aries.analysis_update(state: State, update: LogEntry)` processes a update
 // operation during the analysis phase.
 aries.analysis_update = function(state, update) {
+  state.explanation.push(
+    "Transaction " + update.txn_id + " updated page " + update.page_id + "."
+  );
+
   // Update the dirty page table.
   aries.dirty(state, update.page_id, update.lsn);
 
@@ -769,15 +862,27 @@ aries.analysis_update = function(state, update) {
 // `aries.analysis_commit(state: State, commit: LogEntry)` processes a commit
 // operation during the analysis phase.
 aries.analysis_commit = function(state, commit) {
+  state.explanation.push(
+    "Transaction " + commit.txn_id + " committed."
+  );
+
   // Update the transaction table.
   aries.begin_txn(state, commit.txn_id);
   state.txn_table[commit.txn_id].txn_status = aries.TxnStatus.COMMITTED;
   state.txn_table[commit.txn_id].last_lsn = commit.lsn;
+  state.explanation.push(
+    "Transaction " + commit.txn_id + "'s status was set to 'committed' in " +
+    "the transaction table."
+  );
 }
 
 // `aries.analysis_end(state: State, end: LogEntry)` processes an end operation
 // during the analysis phase.
 aries.analysis_end = function(state, end) {
+  state.explanation.push(
+    "Transaction " + end.txn_id + " ended and was removed from the " +
+    "transaction table."
+  );
   // Remove the transaction from the transaction table.
   delete state.txn_table[end.txn_id];
 }
@@ -804,6 +909,9 @@ aries.analysis_checkpoint = function(state, checkpoint) {
 
   state.dirty_page_table = aries.deep_copy(checkpoint.dirty_page_table);
   state.txn_table = aries.deep_copy(checkpoint.txn_table);
+  state.explanation.push(
+    "The dirty page table and transaction table are loaded from the checkpoint."
+  );
 }
 
 // `aries.analysis(states: aries.State list, ops: aries.Op.Operation list)`
@@ -818,6 +926,22 @@ aries.analysis = function(states) {
 
   for (var i = start_lsn; i < state.log.length; i++) {
     var log_entry = state.log[i];
+    if (i == start_lsn) {
+      if (log_entry.type === aries.Log.Type.CHECKPOINT) {
+        state.explanation = [
+          "ARIES began its analysis phase at LSN " + start_lsn + ": the LSN " +
+          "of the most recent checkpoint."
+        ];
+      } else {
+        state.explanation = [
+          "There were no checkpoints, so ARIES began its analysis phase at " +
+          "the beginning of the log."
+        ];
+      }
+    } else {
+      state.explanation = [];
+    }
+
     if (log_entry.type === aries.Log.Type.UPDATE) {
       aries.analysis_update(state, log_entry);
     } else if (log_entry.type === aries.Log.Type.COMMIT) {
@@ -844,6 +968,10 @@ aries.analysis = function(states) {
       state.txn_table[txn_id].txn_status = aries.TxnStatus.ABORTED;
     }
   }
+  state.explanation = [
+    "ARIES completed its analysis phase and marked in progress transactions " +
+    "as aborted."
+  ];
   states.push(state);
 }
 
@@ -851,17 +979,46 @@ aries.analysis = function(states) {
 // `aries.redo_update(state: State, update: LogEntry)` processes a update
 // operation during the redo phase.
 aries.redo_update = function(state, update) {
+  state.explanation.push(
+    "Transaction " + update.txn_id + " updated page " + update.page_id + "."
+  );
+
   // An update to a page need not be redone if
   //   1. the page is not in the dirty page table;
   //   2. the page is in the dirty page table, and the recLSN is greater than
   //      the LSN of the update; or
   //   3. the recLSN on disk is greater than or equal to the LSN of the update.
-  if (!(update.page_id in state.dirty_page_table) ||
-      state.dirty_page_table[update.page_id].rec_lsn > update.lsn ||
-      state.disk[update.page_id].page_lsn >= update.lsn) {
+  if (!(update.page_id in state.dirty_page_table)) {
+    state.explanation.push(
+      "Condition 1 was met: page " + update.page_id + " was not in the " +
+      "dirty page table. So, the update was not redone."
+    );
+    return;
+  }
+  var dpt_rec_lsn = state.dirty_page_table[update.page_id].rec_lsn;
+  if (dpt_rec_lsn > update.lsn) {
+    state.explanation.push(
+      "Condition 2 was met: page " + update.page_id + " was in the dirty " +
+      "page table, but its recLSN of " + dpt_rec_lsn + " is greater than " +
+      "the LSN of this log entry: " + update.lsn + ". So, the update was " +
+      "not redone."
+    );
+    return;
+  }
+  var disk_page_lsn = state.disk[update.page_id].page_lsn;
+  if (disk_page_lsn >= update.lsn) {
+    state.explanation.push(
+      "Condition 3 was met: the pageLSN of page " + update.page_id +
+      " on disk was " + disk_page_lsn + " which is greater than or equal to " +
+      "the LSN of this log entry: " + update.lsn + ". So, the update was " +
+      "not redone."
+    );
     return;
   }
 
+  state.explanation.push(
+    "The update did not meet any of condition 1, 2, or 3 and so was redone."
+  );
   aries.pin(state, update.page_id);
   state.buffer_pool[update.page_id].page_lsn = update.lsn;
   state.buffer_pool[update.page_id].value = update.after;
@@ -870,13 +1027,13 @@ aries.redo_update = function(state, update) {
 // `aries.redo_commit(state: State, commit: LogEntry)` processes a commit
 // operation during the redo phase.
 aries.redo_commit = function(state, commit) {
-  // Commits are not redone.
+  state.explanation.push("Commit log entries are not redone.");
 }
 
 // `aries.redo_end(state: State, end: LogEntry)` processes an end operation
 // during the redo phase.
 aries.redo_end = function(state, end) {
-  // Ends are not redone.
+  state.explanation.push("End log entries are not redone.");
 }
 
 // `aries.redo_clr(state: State, clr: LogEntry)` processes a clr operation
@@ -890,7 +1047,7 @@ aries.redo_clr = function(state, clr) {
 // `aries.redo_checkpoint(state: State, checkpoint: LogEntry)` processes a
 // checkpoint operation during the redo phase.
 aries.redo_checkpoint = function(state, checkpoint) {
-  // Checkpoints are not redone.
+  state.explanation.push("Checkpoint log entries are not redone.");
 }
 
 // `aries.redo(states: aries.State list, ops: aries.Op.Operation list)`
@@ -910,6 +1067,15 @@ aries.redo = function(states) {
 
   for (var i = start_lsn; i < state.log.length; i++) {
     var log_entry = state.log[i];
+    if (i == start_lsn) {
+      state.explanation = [
+        "ARIES began its REDO phase at LSN " + start_lsn + ": the smallest " +
+        "recLSN in the dirty page table."
+      ];
+    } else {
+      state.explanation = [];
+    }
+
     if (log_entry.type === aries.Log.Type.UPDATE) {
       aries.redo_update(state, log_entry);
     } else if (log_entry.type === aries.Log.Type.COMMIT) {
@@ -944,7 +1110,13 @@ aries.undo = function(states) {
     losers.push(state.txn_table[page_id].last_lsn);
   }
 
+  state.explanation = [
+    "ARIES began its UNDO phase by collecting the set of \"losers LSNs\": " +
+    "the lastLSNs of all transactions in the dirty page table."
+  ];
+
   while (losers.length > 0) {
+    state.explanation.push("The loser LSNs were " + losers + ".");
     // Get the loser log entry. We repeatedly sort the loser transaction LSNs
     // and pop the last (i.e. biggest) LSN.
     losers.sort();
@@ -953,6 +1125,12 @@ aries.undo = function(states) {
     console.assert(loser_entry.type === aries.Log.Type.UPDATE,
         "Our ARIES simulator doesn't support repeated crashes, so the undo " +
         "phase should never see a CLR log entry.");
+    state.explanation.push(
+      "The largest loser LSNs was " + loser + ", so log entry " + loser +
+      " was undone. A CLR entry was appended to the log, the transaction " +
+      "table was updated accordingly, and the update was undone in the " +
+      "buffer pool."
+    );
 
     // Append a CLR entry.
     var clr_lsn = state.log.length;
@@ -973,17 +1151,28 @@ aries.undo = function(states) {
     if (typeof undo_next_lsn !== "undefined") {
       // Update the loser transactions.
       losers.push(undo_next_lsn);
+      state.explanation.push(
+        "The prevLSN of log entry " + loser + " is " + undo_next_lsn +
+        " which is added to the loser LSNs."
+      );
     } else {
       // End a completely undone transaction and remove it from the transaction
       // table.
       state.log.push(new aries.Log.End(state.log.length, loser_entry.txn_id,
                                    clr_lsn));
       delete state.txn_table[loser_entry.txn_id];
+      state.explanation.push(
+        "Log entry " + loser + " was the first update of transaction " +
+        loser_entry.txn_id + ", so an end log entry was appended to the log " +
+        "to end transaction " + loser_entry.txn_id + ", and it was removed " +
+        "from the transaction table."
+      );
     }
 
     state.log_position = loser_entry.lsn;
     states.push(state);
     state = aries.deep_copy(state);
+    state.explanation = [];
   }
 }
 
