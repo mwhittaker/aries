@@ -59,6 +59,7 @@ By Larry Xu and Michael Whittaker
         border-spacing: 0;
         border-collapse: collapse;
         width: 100%;
+        position: relative;
       }
 
       thead tr {
@@ -73,6 +74,13 @@ By Larry Xu and Michael Whittaker
         background: lightskyblue;
       }
 
+      tr.current-row:after {
+        content: '>';
+        position: absolute;
+        left: -13px;
+        margin-top: 16px;
+      }
+
       th, td {
         border: 1px solid black;
         padding: 3px;
@@ -82,19 +90,41 @@ By Larry Xu and Michael Whittaker
         background: deepskyblue;
       }
 
-      ul#commands {
+      div#modes {
+        margin-top: 18px;
+      }
+
+      ul#commands, ul#explanation {
         list-style-type: none;
         padding: 0;
-        width: 250px;
-        height: 150px;
         overflow-y: scroll;
         background: white;
         border: 1px solid black;
       }
 
+      ul#commands {
+        width: 250px;
+        height: 150px;
+        margin-top: 0;
+      }
+
+      ul#explanation {
+        width: 100%;
+        height: 180px;
+      }
+
+      ul#explanation li {
+        padding: 10px 10px 0 10px;
+      }
+
+      ul#explanation li:last-of-type {
+        padding-bottom: 10px;
+      }
+
       ul#commands li {
         padding: 6px 8px;
         border-bottom: 1px solid black;
+        position: relative;
       }
 
       ul#commands li:last-of-type {
@@ -103,6 +133,12 @@ By Larry Xu and Michael Whittaker
 
       ul#commands li:hover {
         background: #f3f3f3;
+      }
+
+      ul#commands li.current-op:after {
+        content: '>';
+        position: absolute;
+        left: -3px;
       }
 
       ul#commands li i {
@@ -153,15 +189,29 @@ By Larry Xu and Michael Whittaker
       .hidden {
         display: none;
       }
+
+      .clearfix {
+        overflow: auto;
+        zoom: 1;
+      }
+
+      .left {
+        float: left;
+        margin-right: 10px;
+      }
     </style>
   </head>
   <body>
-    <header>
-      <h4>Commands</h4>
-      <div id="modes">
-        <button id="run">Run&nbsp;&nbsp;<i class="fa fa-play"></i></button>
-        <button id="edit">Edit&nbsp;&nbsp;<i class="fa fa-pencil"></i></button>
+    <div class="width-30">
+      <div class="clearfix">
+        <h2 class="left">Operations</h2>
+        <div id="modes">
+          <button id="run">Run&nbsp;&nbsp;<i class="fa fa-play"></i></button>
+          <button id="edit">Edit&nbsp;&nbsp;<i class="fa fa-pencil"></i></button>
+        </div>
       </div>
+      <ul id="commands">
+      </ul>
       <div id="sub-controls">
         <div id="sub-controls-run">
           <span>Controls:</span>
@@ -174,9 +224,14 @@ By Larry Xu and Michael Whittaker
           <button id="new-command"><i class="fa fa-plus"></i></button>
         </div>
       </div>
-      <ul id="commands">
-      </ul>
-    </header>
+
+      <div>
+        <h2>Explanation</h2>
+        <p>Current phase: <span id="phase"></span></p>
+        <ul id="explanation">
+        </ul>
+      </div>
+    </div>
 
     <div class="width-30">
       <div>
@@ -227,9 +282,7 @@ By Larry Xu and Michael Whittaker
           </tbody>
         </table>
       </div>
-    </div>
 
-    <div class="width-30">
       <div>
         <h2>Buffer Pool</h2>
         <table id="buffer-pool">
@@ -350,10 +403,44 @@ By Larry Xu and Michael Whittaker
         d3.select('span#' + span_id)
           .datum(datum)
           .text(function(d) {
-            if (d > -1) {
+            if (d != -1) {
               return d;
             }
           });
+      }
+
+      // Given the number of operations processed and position of the log record
+      // being analyzed, renders a pointer on the commands list and log to
+      // indicate the current position on each respectively. 
+      function updatePointers(num_ops_processed, log_position) {
+        if (num_ops_processed != -1) {
+          d3.select('#commands')
+            .selectAll("li")
+            .attr('class','');
+          d3.select('#commands')
+            .selectAll("li")
+            .filter(function(d, i) { return i == num_ops_processed; })
+            .attr('class','current-op');
+          document.getElementById('commands').scrollTop = num_ops_processed * 31.5;
+        }
+        if (log_position != -1) {
+          d3.select('#log')
+            .selectAll("tr")
+            .filter(function(d, i) { return i == log_position; })
+            .attr('class','current-row');
+        }
+      }
+
+      // Given a list of explanations, renders them in the explanation box
+      function updateExplanation(explanation) {
+        var update = d3.select('#explanation')
+                       .selectAll('li')
+                       .data(explanation);
+        update.text(function(d) { return d; });
+        update.enter()
+              .append('li')
+              .text(function(d) { return d; });
+        update.exit().remove();
       }
 
       // Given a new state, update the UI to reflect the state
@@ -364,6 +451,11 @@ By Larry Xu and Michael Whittaker
         updateTable('buffer-pool', state.buffer_pool);
         updateTable('disk', state.disk);
         updateValue('lsn-flushed', state.num_flushed - 1);
+        updateValue('phase', state.phase);
+        updateValue('num_ops_processed', state.num_ops_processed);
+        updateValue('log_position', state.log_position);
+        updatePointers(state.num_ops_processed, state.log_position);
+        updateExplanation(state.explanation);
       }
 
       // Update the current UI mode
