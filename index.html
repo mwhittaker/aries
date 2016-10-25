@@ -27,6 +27,7 @@ https://github.com/mwhittaker/aries
     <script>vex.defaultOptions.className = 'vex-theme-default'</script>
     <script src="https://rawgit.com/jneen/parsimmon/master/src/parsimmon.js"></script>
     <script src="aries.js"></script>
+    <script async defer src="https://buttons.github.io/buttons.js"></script>
 
     <link rel="stylesheet" href="normalize.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vex-js/3.0.0/css/vex.min.css" />
@@ -72,6 +73,27 @@ https://github.com/mwhittaker/aries
 
       .width-30:last-of-type {
         margin-right: 1%;
+      }
+
+      .title-panel {
+        background: white;
+        padding: 1px 20px;
+        margin-bottom: 10px;
+      }
+
+      .title-panel h3 {
+        margin: 10px 0;
+      }
+
+      #about {
+        float: right;
+        text-decoration: none;
+        font-weight: bold;
+        color: #3288e6;
+      }
+
+      #about:hover {
+        color: #1f66b4;
       }
 
       .panel {
@@ -153,12 +175,12 @@ https://github.com/mwhittaker/aries
       }
 
       ul#commands {
-        height: 149px;
+        height: 119px;
         margin-top: 0;
       }
 
       ul#explanation {
-        height: 180px;
+        height: 165px;
         margin-bottom: 0;
       }
 
@@ -274,6 +296,17 @@ https://github.com/mwhittaker/aries
   <body>
     <div id="wrapper" class="clearfix">
       <div class="width-30">
+        <div class="title-panel">
+          <h3>ARIES Simulator <a id="about" href="#">About <i class="fa fa-info-circle"></i></a></h3>
+          <div id="about-content" class="hidden">
+            <h2>ARIES Simulator</h2>
+            <h5>Developed at UC Berkeley by Larry Xu and Michael Whittaker</h5>
+            <a class="github-button" href="https://github.com/mwhittaker/aries" data-icon="octicon-star" data-style="mega" data-count-href="/mwhittaker/aries/stargazers" data-count-api="/repos/mwhittaker/aries#stargazers_count" data-count-aria-label="# stargazers on GitHub" aria-label="Star mwhittaker/aries on GitHub">Star</a>
+            <p>This simulator is designed to serve as a visual introduction to the ARIES recovery algorithm commonly used in many database systems.</p>
+            <p>If you're interested in learning more about how it works, the code is freely available on Github. Consider sharing this website or starring the repo if you found this work useful.</p>
+          </div>
+        </div>
+
         <div class="panel">
           <div class="clearfix">
             <h3 class="left">Operations</h3>
@@ -535,7 +568,7 @@ https://github.com/mwhittaker/aries
             .selectAll("li")
             .filter(function(d, i) { return i == num_ops_processed; })
             .attr('class','current-op');
-          document.getElementById('commands').scrollTop = num_ops_processed * 30 - 120;
+          document.getElementById('commands').scrollTop = num_ops_processed * 30 - 90;
         }
         if (log_position != -1) {
           d3.select('#log')
@@ -759,6 +792,14 @@ https://github.com/mwhittaker/aries
           }
         }
       });
+
+      // About content modal
+      var about = document.getElementById('about');
+      about.addEventListener('click', function(event) {
+        event.preventDefault();
+        var modalContent = d3.select('#about-content').html();
+        vex.dialog.alert({ unsafeMessage: modalContent });
+      }, false);
 
 
       /**
