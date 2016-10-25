@@ -630,7 +630,10 @@ https://github.com/mwhittaker/aries
           resetAries();
         } else {
           command_list.option('disabled', false);
-          d3.select('ul#commands').attr('class', 'editable');
+          d3.select('ul#commands')
+            .attr('class', 'editable')
+            .selectAll("li")
+            .attr('class','');
         }
       }
 
