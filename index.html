@@ -37,9 +37,8 @@ https://github.com/mwhittaker/aries
         min-width: 900px;
       }
 
-      header {
-        padding: 10px 2.5%;
-        background: antiquewhite;
+      #wrapper {
+        margin-bottom: 25px;
       }
 
       .width-30 {
@@ -112,6 +111,7 @@ https://github.com/mwhittaker/aries
       ul#explanation {
         width: 100%;
         height: 180px;
+        margin-bottom: 0;
       }
 
       ul#explanation li {
@@ -165,6 +165,22 @@ https://github.com/mwhittaker/aries
         display: initial;
       }
 
+      #phase.crashed {
+        color: red;
+      }
+
+      #phase.analysis {
+        color: blue;
+      }
+
+      #phase.redo {
+        color: brown;
+      }
+
+      #phase.undo {
+        color: green;
+      }
+
       #sub-controls {
         margin-top: 15px;
       }
@@ -203,115 +219,116 @@ https://github.com/mwhittaker/aries
     </style>
   </head>
   <body>
-    <div class="width-30">
-      <div class="clearfix">
-        <h2 class="left">Operations</h2>
-        <div id="modes">
-          <button id="run">Run&nbsp;&nbsp;<i class="fa fa-play"></i></button>
-          <button id="edit">Edit&nbsp;&nbsp;<i class="fa fa-pencil"></i></button>
+    <div id="wrapper" class="clearfix">
+      <div class="width-30">
+        <div class="clearfix">
+          <h2 class="left">Operations</h2>
+          <div id="modes">
+            <button id="run" title="Run"><i class="fa fa-play"></i></button>
+            <button id="edit" title="Edit"><i class="fa fa-pencil"></i></button>
+          </div>
         </div>
-      </div>
-      <ul id="commands">
-      </ul>
-      <div id="sub-controls">
-        <div id="sub-controls-run">
-          <span>Controls:</span>
-          <button id="left-arrow"><i class="fa fa-chevron-left"></i></button>
-          <button id="right-arrow"><i class="fa fa-chevron-right"></i></button>
-          <span>(or use left and right arrow keys)</span>
-        </div>
-        <div id="sub-controls-edit" class="hidden">
-          <span>Append new command</span>
-          <button id="new-command"><i class="fa fa-plus"></i></button>
-        </div>
-      </div>
-
-      <div>
-        <h2>Explanation</h2>
-        <p>Current phase: <span id="phase"></span></p>
-        <ul id="explanation">
+        <ul id="commands">
         </ul>
-      </div>
-    </div>
+        <div id="sub-controls">
+          <div id="sub-controls-run">
+            <span>Controls:</span>
+            <button id="left-arrow"><i class="fa fa-chevron-left"></i></button>
+            <button id="right-arrow"><i class="fa fa-chevron-right"></i></button>
+            <span>(or left and right arrow keys)</span>
+          </div>
+          <div id="sub-controls-edit" class="hidden">
+            <button id="new-command"><i class="fa fa-plus"></i>&nbsp;&nbsp;Append new command</button>
+          </div>
+        </div>
 
-    <div class="width-30">
-      <div>
-        <h2>Log</h2>
-        <p>LSN of last log record flushed to disk: <span id="lsn-flushed"></span></p>
-        <table id="log">
-          <thead>
-            <tr>
-              <th>LSN</th>
-              <th>Trans ID</th>
-              <th>Type</th>
-              <th>Page ID</th>
-              <th>prevLSN</th>
-            </tr>
-          </thead>
-          <tbody>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="width-30">
-      <div>
-        <h2>Dirty Page Table</h2>
-        <table id="dirty-page-table">
-          <thead>
-            <tr>
-              <th>Page ID</th>
-              <th>recLSN</th>
-            </tr>
-          </thead>
-          <tbody>
-          </tbody>
-        </table>
+        <div>
+          <h2>Explanation</h2>
+          <p>Current phase: <span id="phase"></span></p>
+          <ul id="explanation">
+          </ul>
+        </div>
       </div>
 
-      <div>
-        <h2>Transaction Table</h2>
-        <table id="transaction-table">
-          <thead>
-            <tr>
-              <th>Trans ID</th>
-              <th>Status</th>
-              <th>lastLSN</th>
-            </tr>
-          </thead>
-          <tbody>
-          </tbody>
-        </table>
+      <div class="width-30">
+        <div>
+          <h2>Log</h2>
+          <p>LSN of last log record flushed to disk: <span id="lsn-flushed"></span></p>
+          <table id="log">
+            <thead>
+              <tr>
+                <th>LSN</th>
+                <th>Trans ID</th>
+                <th>Type</th>
+                <th>Page ID</th>
+                <th>prevLSN</th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div>
-        <h2>Buffer Pool</h2>
-        <table id="buffer-pool">
-          <thead>
-            <tr>
-              <th>Page ID</th>
-              <th>pageLSN</th>
-              <th>Value</th>
-            </tr>
-          </thead>
-          <tbody>
-          </tbody>
-        </table>
-      </div>
+      <div class="width-30">
+        <div>
+          <h2>Dirty Page Table</h2>
+          <table id="dirty-page-table">
+            <thead>
+              <tr>
+                <th>Page ID</th>
+                <th>recLSN</th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+        </div>
 
-      <div>
-        <h2>Disk</h2>
-        <table id="disk">
-          <thead>
-            <tr>
-              <th>Page ID</th>
-              <th>pageLSN</th>
-              <th>Value</th>
-            </tr>
-          </thead>
-          <tbody>
-          </tbody>
-        </table>
+        <div>
+          <h2>Transaction Table</h2>
+          <table id="transaction-table">
+            <thead>
+              <tr>
+                <th>Trans ID</th>
+                <th>Status</th>
+                <th>lastLSN</th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h2>Buffer Pool</h2>
+          <table id="buffer-pool">
+            <thead>
+              <tr>
+                <th>Page ID</th>
+                <th>pageLSN</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h2>Disk</h2>
+          <table id="disk">
+            <thead>
+              <tr>
+                <th>Page ID</th>
+                <th>pageLSN</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -444,6 +461,12 @@ https://github.com/mwhittaker/aries
         update.exit().remove();
       }
 
+      // Given a new phase, update the style of the UI
+      function updateStyle(phase) {
+        d3.select('span#phase')
+          .attr('class', phase);
+      }
+
       // Given a new state, update the UI to reflect the state
       function onStateChanged(state) {
         updateTable('log', state.log);
@@ -457,6 +480,7 @@ https://github.com/mwhittaker/aries
         updateValue('log_position', state.log_position);
         updatePointers(state.num_ops_processed, state.log_position);
         updateExplanation(state.explanation);
+        updateStyle(state.phase);
       }
 
       // Update the current UI mode
@@ -466,10 +490,10 @@ https://github.com/mwhittaker/aries
         // Toggle the correct mode button
         d3.select('div#modes')
           .selectAll('button')
-          .attr('disabled', null);
+          .attr('class', null);
         d3.select('div#modes')
           .selectAll('button#' + mode)
-          .attr('disabled', true);
+          .attr('class', 'hidden');
 
         // Toggle the correct sub controls
         d3.select('div#sub-controls')
