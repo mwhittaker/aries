@@ -1,0 +1,257 @@
+body {
+  min-width: 1200px;
+  color: #333;
+  font-size: 0.9em;
+  background: #f5e575;
+}
+
+body.crashed {
+  background: #d05959;
+}
+
+body.analysis {
+  background: #529fcc;
+}
+
+body.redo {
+  background: #ffa362;
+}
+
+body.undo {
+  background: #48c15d;
+}
+
+#wrapper {
+  margin-top: 10px;
+}
+
+.width-30 {
+  width: 32%;
+  margin: 0 0.5% 0 0.5%;
+  float: left;
+}
+
+.width-30:first-of-type {
+  margin-left: 1%;
+}
+
+.width-30:last-of-type {
+  margin-right: 1%;
+}
+
+.title-panel {
+  background: white;
+  padding: 1px 20px;
+  margin-bottom: 10px;
+}
+
+.title-panel h3 {
+  margin: 10px 0;
+}
+
+#about {
+  float: right;
+  text-decoration: none;
+  font-weight: bold;
+  color: #3288e6;
+}
+
+#about:hover {
+  color: #1f66b4;
+}
+
+.panel {
+  background: white;
+  padding: 1px 20px 20px 20px;
+  margin-bottom: 10px;
+  border-bottom: 2px solid #e8d863;
+}
+
+.panel.crashed {
+  border-bottom: 2px solid #bf4949;
+}
+
+.panel.analysis {
+  border-bottom: 2px solid #357aa2;
+}
+
+.panel.redo {
+  border-bottom: 2px solid #cc8c60;
+}
+
+.panel.undo {
+  border-bottom: 2px solid #36a84a;
+}
+
+table {
+  border-spacing: 0;
+  border-collapse: collapse;
+  width: 100%;
+  position: relative;
+}
+
+thead tr {
+  background: bisque;
+}
+
+tr, td {
+  transition: background 0.5s;
+}
+
+tr {
+  background: #fafafa;
+}
+
+tr.new-row {
+  background: #50f26b;
+}
+
+tr.updated-row {
+  background: #85dafa;
+}
+
+tr.current-row:after {
+  content: '>';
+  position: absolute;
+  left: -13px;
+  margin-top: 18px;
+}
+
+th, td {
+  border: 1px solid black;
+  padding: 4px;
+}
+
+td.updated-cell {
+  background: #17bfff;
+}
+
+div#modes {
+  margin-top: 18px;
+}
+
+ul#commands, ul#explanation {
+  list-style-type: none;
+  padding: 0;
+  overflow-y: scroll;
+  background: white;
+  border: 1px solid black;
+}
+
+ul#commands {
+  height: 119px;
+  margin-top: 0;
+}
+
+ul#explanation {
+  height: 165px;
+  margin-bottom: 0;
+}
+
+ul#explanation li {
+  padding: 10px 10px 0 10px;
+}
+
+ul#explanation li:last-of-type {
+  padding-bottom: 10px;
+}
+
+ul#commands li {
+  padding: 6px 8px;
+  border-bottom: 1px solid black;
+  position: relative;
+}
+
+ul#commands li:last-of-type {
+  border: 0;
+}
+
+ul#commands li:hover {
+  background: #f3f3f3;
+}
+
+ul#commands li.current-op:after {
+  content: '>';
+  position: absolute;
+  left: -3px;
+}
+
+ul#commands li i {
+  float: right;
+  margin-right: 5px;
+  display: none;
+  cursor: pointer;
+}
+
+ul#commands li i.edit {
+  color: green;
+}
+
+ul#commands li i.remove {
+  color: red;
+}
+
+ul#commands.editable li {
+  cursor: move;
+}
+
+ul#commands.editable li:hover i {
+  display: initial;
+}
+
+#phase.crashed {
+  color: red;
+}
+
+#phase.analysis {
+  color: blue;
+}
+
+#phase.redo {
+  color: brown;
+}
+
+#phase.undo {
+  color: green;
+}
+
+#sub-controls {
+  margin-top: 15px;
+}
+
+button {
+  background: #3288e6;
+  color: white;
+  border: 0;
+  padding: 2px 4px;
+  cursor: pointer;
+  font-size: 0.85em;
+}
+
+button:disabled,
+button:hover:disabled {
+  background: #8dbdf1;
+  cursor: not-allowed;
+}
+
+button:hover {
+  background: #1f66b4;
+}
+
+button:active {
+  background: #1459a4;
+}
+
+.hidden {
+  display: none;
+}
+
+.clearfix {
+  overflow: auto;
+  zoom: 1;
+}
+
+.left {
+  float: left;
+  margin-right: 10px;
+}
