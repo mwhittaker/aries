@@ -474,10 +474,15 @@ https://github.com/mwhittaker/aries
                                      return d[key]
                                    })
                                    .attr('class', function(d, i) {
-                                     if (prev_data == null) {
-                                       return '';
+                                     if (prev_data != null) {
+                                       for (var objs of prev_data) {
+                                         if (objs[key] == this.id) {
+                                           return '';
+                                         }
+                                       }
+                                       return 'new-row';
                                      }
-                                     return 'new-row';
+                                     return '';
                                    });
 
         new_rows.selectAll('td')
@@ -488,6 +493,21 @@ https://github.com/mwhittaker/aries
                 })
                 .enter()
                 .append('td')
+                .attr('class', function(d, i) {
+                  if (prev_data != null) {
+                    for (var objs of prev_data) {
+                      if (objs[key] == this.parentNode.id) {
+                        if (objs[columns[i]] !== d) {
+                          d3.select(this.parentNode)
+                            .attr('class', 'updated-row');
+                          return 'updated-cell';
+                        }
+                        return '';
+                      }
+                    }
+                  }
+                  return '';
+                })
                 .text(function(d) { return d; });
       }
 
