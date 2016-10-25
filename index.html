@@ -203,6 +203,10 @@ https://github.com/mwhittaker/aries
         background: #1f66b4;
       }
 
+      button:active {
+        background: #1459a4;
+      }
+
       .hidden {
         display: none;
       }
@@ -358,12 +362,16 @@ https://github.com/mwhittaker/aries
       }
 
       // Given a DOM table id and data list/object, join the new data to the
-      // DOM table using D3 joins
-      function updateTable(table_id, data) {
+      // DOM table using D3 joins. If prev_data is not undefined, then any
+      // changes between the previous and new data should be highlighted.
+      function updateTable(table_id, data, prev_data) {
         var columns = column_keys[table_id];
         var key = columns[0];
         if (!Array.isArray(data)) {
           data = mapToList(data, key);
+          if (prev_data != null) {
+            prev_data = mapToList(prev_data, key);
+          }
         }
 
         var updated_rows = d3.select('table#' + table_id)
@@ -372,7 +380,17 @@ https://github.com/mwhittaker/aries
                              .data(data, function(d) {
                                return d ? d[key] : this.id;
                              })
-                             .attr('class', '');
+                             .attr('class', function(d, i) {
+                               if (prev_data != null) {
+                                for (var objs of prev_data) {
+                                  if (objs[key] == this.id) {
+                                    return '';
+                                  }
+                                }
+                                return 'new-row';
+                               }
+                               return '';
+                             });
 
         updated_rows.exit().remove();
 
@@ -382,15 +400,20 @@ https://github.com/mwhittaker/aries
                                     return row[column];
                                   });
                                 })
-                                .attr('class', function(d) {
-                                  return (d !== this.__oldData__) ? 'updated-cell' : '';
-                                })
-                                .property('__oldData__', function(d) {
-                                  if (d !== this.__oldData__) {
-                                    d3.select(this.parentNode)
-                                      .attr('class', 'updated-row');
+                                .attr('class', function(d, i) {
+                                  if (prev_data != null) {
+                                    for (var objs of prev_data) {
+                                      if (objs[key] == this.parentNode.id) {
+                                        if (objs[columns[i]] !== d) {
+                                          d3.select(this.parentNode)
+                                            .attr('class', 'updated-row');
+                                          return 'updated-cell';
+                                        }
+                                        return '';
+                                      }
+                                    }
                                   }
-                                  return d;
+                                  return '';
                                 })
                                 .text(function(d) { return d; });
 
@@ -399,7 +422,12 @@ https://github.com/mwhittaker/aries
                                    .attr('id', function(d) {
                                      return d[key]
                                    })
-                                   .attr('class', 'new-row');
+                                   .attr('class', function(d, i) {
+                                     if (prev_data == null) {
+                                       return '';
+                                     }
+                                     return 'new-row';
+                                   });
 
         new_rows.selectAll('td')
                 .data(function(row) {
@@ -409,9 +437,6 @@ https://github.com/mwhittaker/aries
                 })
                 .enter()
                 .append('td')
-                .property('__oldData__', function(d) {
-                  return d;
-                })
                 .text(function(d) { return d; });
       }
 
@@ -467,17 +492,37 @@ https://github.com/mwhittaker/aries
           .attr('class', phase);
       }
 
+      // Given a new state index, enable/disable the left and right arrows
+      function updateArrows(stateIdx) {
+        if (stateIdx == 0) {
+          d3.select('#left-arrow')
+            .attr('disabled', true);
+        } else if (stateIdx == states.length - 1) {
+          d3.select('#right-arrow')
+            .attr('disabled', true);
+        } else {
+          d3.select('#left-arrow')
+            .attr('disabled', null);
+          d3.select('#right-arrow')
+            .attr('disabled', null);
+        }
+      }
+
       // Given a new state, update the UI to reflect the state
-      function onStateChanged(state) {
-        updateTable('log', state.log);
-        updateTable('dirty-page-table', state.dirty_page_table);
-        updateTable('transaction-table', state.txn_table);
-        updateTable('buffer-pool', state.buffer_pool);
-        updateTable('disk', state.disk);
+      function onStateChanged(stateIdx) {
+        var state = states[stateIdx];
+        var prevState = {};
+        if (stateIdx > 0) {
+          prevState = states[stateIdx - 1];
+        }
+        updateArrows(stateIdx);
+        updateTable('log', state.log, prevState.log);
+        updateTable('dirty-page-table', state.dirty_page_table, prevState.dirty_page_table);
+        updateTable('transaction-table', state.txn_table, prevState.txn_table);
+        updateTable('buffer-pool', state.buffer_pool, prevState.buffer_pool);
+        updateTable('disk', state.disk, prevState.disk);
         updateValue('lsn-flushed', state.num_flushed - 1);
         updateValue('phase', state.phase);
-        updateValue('num_ops_processed', state.num_ops_processed);
-        updateValue('log_position', state.log_position);
         updatePointers(state.num_ops_processed, state.log_position);
         updateExplanation(state.explanation);
         updateStyle(state.phase);
@@ -537,20 +582,20 @@ https://github.com/mwhittaker/aries
         // Start the ARIES simulator.
         states = aries.simulate(ops);
         currStateIdx = 0;
-        onStateChanged(states[currStateIdx]);
+        onStateChanged(currStateIdx);
       }
 
       // Renders previous state
       function renderPrevState() {
         if (currStateIdx > 0) {
-          onStateChanged(states[--currStateIdx]);
+          onStateChanged(--currStateIdx);
         }
       }
 
       // Renders next state
       function renderNextState() {
         if (currStateIdx < states.length - 1) {
-          onStateChanged(states[++currStateIdx]);
+          onStateChanged(++currStateIdx);
         }
       }
 
