@@ -1112,7 +1112,7 @@ aries.undo = function(states) {
 
   state.explanation = [
     "ARIES began its UNDO phase by collecting the set of \"losers LSNs\": " +
-    "the lastLSNs of all transactions in the dirty page table."
+    "the lastLSNs of all transactions in the transaction table."
   ];
 
   while (losers.length > 0) {
