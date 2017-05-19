@@ -147,7 +147,8 @@ window.onload = function(){
         .selectAll("li")
         .filter(function(d, i) { return i == num_ops_processed; })
         .attr('class','current-op');
-      document.getElementById('commands').scrollTop = num_ops_processed * 30 - 90;
+      var commandEle = document.getElementById('commands');
+      commandEle.scrollTop = commandEle.children[0].offsetHeight * (num_ops_processed -2);
     }
     if (log_position != -1) {
       d3.select('#log')
